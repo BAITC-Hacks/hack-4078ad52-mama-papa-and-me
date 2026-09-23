@@ -7,7 +7,7 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = 'app ui backend engine ai storage data contracts config mocks'.split()
+MODULES = 'app ui backend engine ai storage data contracts config'.split()
 
 
 def require(condition, message):
@@ -29,9 +29,9 @@ def main():
     require({n for n in names if n.lower() == 'agents.md'} == {'AGENTS.md'},
             'Expected exactly one root instruction named AGENTS.md')
     required = ['README.md', 'AGENTS.md', 'plans.md', '.env.example', '.gitignore',
-                'docs/team-roles.md', 'docs/architecture/README.md',
+                'docs/archive/team-roles.md', 'docs/architecture/README.md',
                 'docs/data/dataset-source.md', 'docs/data/README.md', 'docs/research/README.md',
-                'docs/superpowers/specs/2026-09-23-openai-astra-integration-design.md',
+                'docs/ai-design.md',
                 'scripts/check_docs.py', 'scripts/verify_dataset.py', 'scripts/README.md',
                 'tests/README.md', 'tests/integration/README.md', 'tests/e2e/README.md']
     required += [f'src/{module}/README.md' for module in MODULES]
