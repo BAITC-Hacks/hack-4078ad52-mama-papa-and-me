@@ -56,6 +56,8 @@ import { categories, dataset, exampleSelections, scenarioInput } from "@/data";
 import { canonicalSelections, simulate, validate } from "@/engine";
 import { Button } from "../components/button";
 import { CityMap } from "./city-map";
+import { ScenarioEvidence } from "./scenario-evidence";
+import { readableEvidenceLabel } from "./evidence-label";
 
 const icons = {
   transport: TrainFront,
@@ -138,12 +140,21 @@ export function CitySimulator() {
         sessionStorage.getItem("akim-session") || session.current;
       sessionStorage.setItem("akim-session", session.current);
     } catch {}
+    let restored: Selection[] = [];
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const input = scenarioSchema.parse(JSON.parse(raw));
+        if (validate(input, dataset, false).length === 0) restored = input.selections;
+      }
+    } catch {}
     try {
       const id = sessionStorage.getItem("akim-active-analysis");
-      if (id) {
+      const key = sessionStorage.getItem("akim-active-selection");
+      if (id && key === canonicalSelections(restored)) {
         void api<AnalysisView>(`/api/analyses/${id}`)
           .then((job) => {
-            if (generation.current === 0) {
+            if (generation.current === 0 && job.snapshotKey === key) {
               setAnalysis(job);
               activeId.current = job.status === "pending" ? job.id : null;
             }
@@ -250,6 +261,7 @@ export function CitySimulator() {
     generation.current++;
     try {
       sessionStorage.removeItem("akim-active-analysis");
+      sessionStorage.removeItem("akim-active-selection");
     } catch {}
     const id = activeId.current;
     activeId.current = null;
@@ -264,10 +276,8 @@ export function CitySimulator() {
     previous?: Selection[],
     measureId = focusMeasure,
   ) {
-    const stopping = stopAnalysis();
+    stopAnalysis();
     const token = generation.current;
-    await stopping;
-    if (token !== generation.current) return;
     setStarting(true);
     setError("");
     try {
@@ -292,6 +302,7 @@ export function CitySimulator() {
       activeId.current = response.status === "pending" ? response.id : null;
       try {
         sessionStorage.setItem("akim-active-analysis", response.id);
+        sessionStorage.setItem("akim-active-selection", response.snapshotKey);
       } catch {}
     } catch (e) {
       if (token === generation.current) setError((e as Error).message);
@@ -305,18 +316,12 @@ export function CitySimulator() {
       setError(errors.map((e) => e.message).join(" "));
       return;
     }
-    const previous = selections;
+    stopAnalysis();
     setSelections(next);
     setServerReport(null);
     setNotice("");
     setError("");
-    void analyze(
-      "step",
-      next,
-      "Объясни изменение набора решений: выгода, компромисс и международный контекст.",
-      previous,
-      null,
-    );
+    // Paid research starts only on an explicit request.
   }
   function add(measure: Measure) {
     commit([
@@ -381,6 +386,8 @@ export function CitySimulator() {
       await api("/api/scenarios", "POST", {
         ...scenarioInput(selections),
         name: scenarioName,
+        analysisId: analysisCurrent && analysis?.kind === "final" && analysis.explanation
+          && ["completed", "failed"].includes(analysis.status) ? analysis.id : null,
       });
       setNotice("Сценарий сохранён на этом компьютере.");
     } catch (e) {
@@ -406,7 +413,10 @@ export function CitySimulator() {
     }
     await stopAnalysis();
     setSelections(s.input.selections);
-    setServerReport(s.report);
+    const recalculated = simulate(s.input, dataset, true);
+    if (!recalculated.valid) return;
+    setServerReport(recalculated.report);
+    setAnalysis(s.analysis ?? null);
     setScenarioName(s.name);
     setTab("result");
     setNotice("Открыт сохранённый сценарий.");
@@ -570,7 +580,7 @@ export function CitySimulator() {
                         {Math.round(district.population * 100)}% населения
                       </span>
                     </div>
-                    <p>{district.profile}</p>
+                    <p><strong>Исходная ситуация:</strong> {district.profile}</p>
                   </div>
                   <div className="district-rating">
                     <strong>{fmt(currentDistrict.score, 1)}</strong>
@@ -964,7 +974,7 @@ export function CitySimulator() {
               </div>
               <div>
                 <h2>Городской советник</h2>
-                <p>Astra · medium · исследование источников</p>
+                <p>Astra · medium · исследование по вашему запросу</p>
               </div>
               <button
                 aria-label="Закрыть советника"
@@ -1054,7 +1064,7 @@ export function CitySimulator() {
                 rows={3}
               />
               <div>
-                <small>Ответ с источниками · AI может ошибаться</small>
+                <small>Запрос расходует API-баланс · AI может ошибаться</small>
                 <Button
                   size="sm"
                   type="submit"
@@ -1207,7 +1217,7 @@ function Result({
             </div>
             <div className="summary-line">
               <span>Слабейший район</span>
-              <strong>{fmt(report.minimum)}</strong>
+              <strong>{report.districts.filter((d) => d.score === report.minimum).map((d) => d.name).join(", ")} · {fmt(report.minimum)}</strong>
             </div>
             <h4>Сработавшие синергии</h4>
             {report.synergies.length ? (
@@ -1250,6 +1260,7 @@ function Result({
           </div>
         </div>
       </div>
+      <ScenarioEvidence report={report} />
       <div className="panel detailed-results">
         <h3>Показатели до и после</h3>
         <div className="table-scroll">
@@ -1298,6 +1309,15 @@ function ExplanationPanel({ analysis }: { analysis: AnalysisView }) {
     return (
       <div className="claim" key={i}>
         <p>{c.text}</p>
+        {c.factIds.length > 0 && (
+          <details>
+            <summary>Основания в расчёте</summary>
+            <ul>{c.factIds.map((id) => {
+              const fact = analysis.evidence?.find((f) => f.id === id);
+              return <li key={id}>{fact ? readableEvidenceLabel(fact.text) + ": " + fmt(fact.value) : "Архивный факт: выполните новый разбор для просмотра основания."}</li>;
+            })}</ul>
+          </details>
+        )}
         {c.sourceIds.length > 0 && (
           <div className="claim-links">
             {c.sourceIds.map((id) => {
@@ -1323,13 +1343,14 @@ function ExplanationPanel({ analysis }: { analysis: AnalysisView }) {
           ? "AI-анализ с источниками"
           : "Шаблонное объяснение"}
       </span>
+      <h3>Главный вывод</h3>
       {claim(e.summary, 0)}
+      <p className="muted">Это результат учебной модели, а не прогноз реального города. Числа можно раскрыть под каждым выводом. Критическим считается показатель ниже 40.</p>
       {[
-        { title: "Что улучшается", items: e.strengths, Icon: ArrowUpRight },
-        { title: "Риски и компромиссы", items: e.risks, Icon: ArrowDown },
-        { title: "Международный опыт", items: e.context, Icon: BookOpen },
+        { title: "Что стало лучше", items: e.strengths, Icon: ArrowUpRight },
+        { title: "На что обратить внимание", items: e.risks, Icon: ArrowDown },
         {
-          title: "Что проверить дальше",
+          title: "Что сделать дальше",
           items: e.recommendations,
           Icon: Compass,
         },
@@ -1345,9 +1366,15 @@ function ExplanationPanel({ analysis }: { analysis: AnalysisView }) {
             </section>
           ),
       )}
+      {e.context.length > 0 && (
+        <details>
+          <summary><BookOpen size={14} /> Что подсказывает мировой опыт</summary>
+          {e.context.map(claim)}
+        </details>
+      )}
       {e.limitations.length > 0 && (
         <div className="limitations">
-          <strong>Границы вывода</strong>
+          <strong>Что ещё нужно учитывать</strong>
           {e.limitations.map((l, i) => (
             <p key={i}>{l}</p>
           ))}
@@ -1367,7 +1394,7 @@ function ExplanationPanel({ analysis }: { analysis: AnalysisView }) {
               <span>
                 {s.title}
                 <small>
-                  Проверено {new Date(s.checkedAt).toLocaleDateString("ru-RU")}
+                  Источник получен {new Date(s.checkedAt).toLocaleDateString("ru-RU")}
                 </small>
               </span>
               <ExternalLink size={14} />

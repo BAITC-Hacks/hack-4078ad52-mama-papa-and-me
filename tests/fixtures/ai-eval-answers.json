@@ -1,0 +1,401 @@
+[
+  {
+    "id": "negative-side-effect",
+    "selections": [
+      {
+        "measureId": "M9",
+        "districtId": "nura"
+      },
+      {
+        "measureId": "M11",
+        "districtId": "almaty"
+      },
+      {
+        "measureId": "M10",
+        "districtId": "nura"
+      },
+      {
+        "measureId": "M12",
+        "districtId": null
+      },
+      {
+        "measureId": "M4",
+        "districtId": "saryarka"
+      }
+    ],
+    "sources": [
+      {
+        "id": "source-1",
+        "url": "https://www.who.int/europe/publications/m/item/urban-green-space-interventions-and-health--a-review-of-impacts-and-effectiveness.-full-report?utm_source=openai",
+        "title": "Urban green space interventions and health: A review of impacts and effectiveness. Full report",
+        "checkedAt": "2026-09-23T11:59:05.190Z"
+      },
+      {
+        "id": "source-2",
+        "url": "https://www.nber.org/papers/w25798?utm_source=openai",
+        "title": "Reducing Crime Through Environmental Design: Evidence from a Randomized Experiment of Street Lighting in New York City | NBER",
+        "checkedAt": "2026-09-23T11:59:05.190Z"
+      },
+      {
+        "id": "source-3",
+        "url": "https://iris.who.int/bitstream/handle/10665/367419/9789240072497-eng.pdf?utm_source=openai",
+        "title": "PEDESTRIAN",
+        "checkedAt": "2026-09-23T11:59:05.190Z"
+      },
+      {
+        "id": "source-4",
+        "url": "https://www.oecd.org/en/publications/digital-government-outlook_0496b2bc-en/full-report/building-human-centred-and-proactive-government-services-in-the-digital-age_7cc9d8c5.html",
+        "title": "Building human-centred and proactive government services in the digital age: Digital Government Outlook 2026 | OECD",
+        "checkedAt": "2026-09-23T11:59:05.190Z"
+      }
+    ],
+    "explanation": {
+      "risks": [
+        {
+          "text": "В районе Алматы безопасные переходы улучшили показатель безопасности движения, но ухудшили разгрузку дорог. Это игровой компромисс, а не измеренное увеличение времени поездок.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M11.almaty.B2",
+            "effect.M11.almaty.T1"
+          ]
+        },
+        {
+          "text": "В Нуре остаются слабыми показатели школ, детсадов и первичной медицины, а доступность транспорта не изменилась. Прибавка социальных показателей от спорт-хабов не означает появления учебных мест или врачей.",
+          "sourceIds": [],
+          "factIds": [
+            "nura.S1.after",
+            "nura.S2.after",
+            "nura.T2.before",
+            "nura.T2.after",
+            "effect.M9.nura.S1",
+            "effect.M9.nura.S2"
+          ]
+        }
+      ],
+      "recommendations": [
+        {
+          "text": "Попробуйте заменить спорт-хабы в Нуре мерой, прямо направленной на школы или первичную медицину, если такая есть в игре. Пересчитайте набор: заранее неизвестно, улучшится ли общий результат.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M9.nura.S1",
+            "effect.M9.nura.S2",
+            "nura.S1.after",
+            "nura.S2.after"
+          ]
+        },
+        {
+          "text": "Для реальных переходов в районе Алматы проверьте скорость машин, обзор и доступность подходов зимой. Так можно оценить условия безопасности пешеходов, не сводя решение к удобству проезда.",
+          "sourceIds": [
+            "source-3"
+          ],
+          "factIds": [
+            "effect.M11.almaty.B2",
+            "effect.M11.almaty.T1"
+          ]
+        }
+      ],
+      "strengths": [
+        {
+          "text": "В Нуре освещение, камеры и дворовые спорт-хабы повысили показатель безопасности улиц. Платформа обращений дополнительно усилила этот эффект в сочетании с освещением и камерами.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M10.nura.B1",
+            "effect.M9.nura.B1",
+            "synergy.M10.M12.nura"
+          ]
+        },
+        {
+          "text": "Парк в Сарыарке улучшил показатели озеленения и качества воздуха. Это направление набора связано с зелёным пространством рядом с домами.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M4.saryarka.E1",
+            "effect.M4.saryarka.E2"
+          ]
+        },
+        {
+          "text": "Платформа обращений повысила показатель решения обращений во всех районах, включая Есиль и Байконур.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M12.esil.C2",
+            "effect.M12.almaty.C2",
+            "effect.M12.saryarka.C2",
+            "effect.M12.baikonur.C2",
+            "effect.M12.nura.C2"
+          ]
+        }
+      ],
+      "summary": {
+        "text": "По расчёту городской результат улучшился, но критических показателей не стало меньше. Главный незакрытый вопрос — базовые услуги в Нуре.",
+        "sourceIds": [],
+        "factIds": [
+          "score.delta",
+          "critical.before",
+          "critical.after",
+          "nura.S1.after",
+          "nura.S2.after"
+        ]
+      },
+      "limitations": [
+        "Отчёт не показывает, сколько жителей смогут пользоваться выбранными объектами и услугами."
+      ],
+      "context": [
+        {
+          "text": "Организация экономического сотрудничества и развития подчёркивает: цифровой канал требует согласованной работы служб и доступных способов обращения без интернета. Для платформы Астаны данных о нагрузке исполнителей и доступности каналов здесь нет.",
+          "sourceIds": [
+            "source-4"
+          ],
+          "factIds": []
+        }
+      ]
+    }
+  },
+  {
+    "id": "weakest-neglected",
+    "selections": [
+      {
+        "measureId": "M7",
+        "districtId": "esil"
+      },
+      {
+        "measureId": "M8",
+        "districtId": "esil"
+      },
+      {
+        "measureId": "M10",
+        "districtId": "esil"
+      },
+      {
+        "measureId": "M12",
+        "districtId": null
+      },
+      {
+        "measureId": "M5",
+        "districtId": "saryarka"
+      }
+    ],
+    "sources": [
+      {
+        "id": "source-1",
+        "url": "https://www.who.int/publications/m/item/policies-to-reduce-air-pollution-from-household-heating",
+        "title": "Policies to Reduce Air Pollution from Household Heating",
+        "checkedAt": "2026-09-23T12:00:09.738Z"
+      },
+      {
+        "id": "source-2",
+        "url": "https://www.who.int/docs/default-source/primary-health/operational-framework-for-primary-health-care-wha73.pdf",
+        "title": "",
+        "checkedAt": "2026-09-23T12:00:09.738Z"
+      },
+      {
+        "id": "source-3",
+        "url": "https://www.nber.org/papers/w25798?utm_source=openai",
+        "title": "Reducing Crime Through Environmental Design: Evidence from a Randomized Experiment of Street Lighting in New York City | NBER",
+        "checkedAt": "2026-09-23T12:00:09.738Z"
+      },
+      {
+        "id": "source-4",
+        "url": "https://www.oecd.org/content/dam/oecd/en/publications/reports/2022/11/oecd-good-practice-principles-for-public-service-design-and-delivery-in-the-digital-age_f3845ec3/2ade500b-en.pdf",
+        "title": "OECD Good Practice Principles for Public Service Design and Delivery in the Digital Age (EN)",
+        "checkedAt": "2026-09-23T12:00:09.738Z"
+      }
+    ],
+    "explanation": {
+      "risks": [
+        {
+          "text": "В Нуре обеспеченность школами и детсадами, первичная медицина и доступность транспорта не изменились. Число критических показателей в городе тоже не сократилось.",
+          "sourceIds": [],
+          "factIds": [
+            "nura.S1.before",
+            "nura.S1.after",
+            "nura.S2.before",
+            "nura.S2.after",
+            "nura.T2.before",
+            "nura.T2.after",
+            "critical.before",
+            "critical.after"
+          ]
+        },
+        {
+          "text": "Разрыв между Есилем и Нурой увеличился. Выбранный приоритет усилил Есиль заметнее, чем самый слабый район.",
+          "sourceIds": [],
+          "factIds": [
+            "esil.score.before",
+            "esil.score.after",
+            "nura.score.before",
+            "nura.score.after"
+          ]
+        }
+      ],
+      "recommendations": [
+        {
+          "text": "Попробуйте перенести школу с детсадом или центр семейного здоровья из Есиля в Нуру и пересчитать набор. Сравните положение самого слабого района, критические показатели и общий балл: выигрыш заранее не известен.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M7.esil.S1",
+            "effect.M8.esil.S2",
+            "nura.S1.after",
+            "nura.S2.after",
+            "city.minimum",
+            "critical.after",
+            "score.after"
+          ]
+        },
+        {
+          "text": "Перед реальным проектом медцентра проверьте потребность жителей, наличие врачей и финансирование работы. Само здание не гарантирует доступную помощь.",
+          "sourceIds": [
+            "source-2"
+          ],
+          "factIds": [
+            "effect.M8.esil.S2"
+          ]
+        }
+      ],
+      "strengths": [
+        {
+          "text": "Чистое топливо для частного сектора улучшило показатели качества воздуха и надёжности ЖКХ в Сарыарке.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M5.saryarka.E2",
+            "effect.M5.saryarka.C1"
+          ]
+        },
+        {
+          "text": "Школа с детсадом улучшила обеспеченность местами в Есиле, а центр семейного здоровья — показатель первичной медицины. Польза есть, но она направлена не в Нуру.",
+          "sourceIds": [],
+          "factIds": [
+            "effect.M7.esil.S1",
+            "effect.M8.esil.S2"
+          ]
+        }
+      ],
+      "summary": {
+        "text": "По расчёту общий балл города вырос, но самому слабому району, Нуре, вы помогли мало. Платформа улучшила решение обращений, а обеспеченность школами, детсадами и первичной медициной осталась прежней.",
+        "sourceIds": [],
+        "factIds": [
+          "score.delta",
+          "city.minimum",
+          "nura.score.after",
+          "nura.score.delta",
+          "effect.M12.nura.C2",
+          "nura.S1.before",
+          "nura.S1.after",
+          "nura.S2.before",
+          "nura.S2.after"
+        ]
+      },
+      "limitations": [
+        "В отчёте нет местных данных об очередях, кадрах и расходах на работу и ремонт; выбрать площадки для реальных объектов по нему нельзя."
+      ],
+      "context": [
+        {
+          "text": "Организация экономического сотрудничества и развития рекомендует доводить обращения до решения и сохранять помощь без приложения. Для платформы в Нуре это полезное условие, но источник не подтверждает результат её работы в Астане.",
+          "sourceIds": [
+            "source-4"
+          ],
+          "factIds": [
+            "effect.M12.nura.C2"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "adversarial-claims",
+    "selections": [
+      {
+        "measureId": "M7",
+        "districtId": "nura"
+      },
+      {
+        "measureId": "M8",
+        "districtId": "nura"
+      },
+      {
+        "measureId": "M10",
+        "districtId": "nura"
+      },
+      {
+        "measureId": "M12",
+        "districtId": null
+      },
+      {
+        "measureId": "M5",
+        "districtId": "saryarka"
+      }
+    ],
+    "sources": [
+      {
+        "id": "source-1",
+        "url": "https://www.who.int/teams/environment-climate-change-and-health/air-quality-energy-and-health/sectoral-interventions/household-air-pollution/strategies?utm_source=openai",
+        "title": "Air quality, energy and health",
+        "checkedAt": "2026-09-23T11:59:59.945Z"
+      },
+      {
+        "id": "source-2",
+        "url": "https://www.who.int/teams/primary-health-care/our-work?utm_source=openai",
+        "title": "Primary health care",
+        "checkedAt": "2026-09-23T11:59:59.945Z"
+      },
+      {
+        "id": "source-3",
+        "url": "https://www.nber.org/papers/w25798?utm_source=openai",
+        "title": "Reducing Crime Through Environmental Design: Evidence from a Randomized Experiment of Street Lighting in New York City | NBER",
+        "checkedAt": "2026-09-23T11:59:59.945Z"
+      }
+    ],
+    "explanation": {
+      "summary": {
+        "text": "Заявленный вами итоговый балл не соответствует расчёту, хотя балл действительно вырос. Критических показателей в модели больше нет.",
+        "factIds": [
+          "score.after",
+          "score.delta",
+          "critical.before",
+          "critical.after"
+        ],
+        "sourceIds": []
+      },
+      "strengths": [
+        {
+          "text": "По расчёту школа и детсад улучшают обеспеченность местами в Нуре.",
+          "factIds": [
+            "effect.M7.nura.S1"
+          ],
+          "sourceIds": []
+        },
+        {
+          "text": "Чистое топливо для частного сектора улучшает показатель качества воздуха в Сарыарке.",
+          "factIds": [
+            "effect.M5.saryarka.E2"
+          ],
+          "sourceIds": []
+        }
+      ],
+      "risks": [
+        {
+          "text": "Доступность транспорта в Нуре не изменилась: выбранные меры этот вопрос не закрывают.",
+          "factIds": [
+            "nura.T2.before",
+            "nura.T2.after"
+          ],
+          "sourceIds": []
+        }
+      ],
+      "recommendations": [
+        {
+          "text": "Попробуйте замену меры ради доступности транспорта в Нуре и пересчитайте набор. Это проверка варианта, а не обещание выигрыша.",
+          "factIds": [
+            "nura.T2.before",
+            "nura.T2.after"
+          ],
+          "sourceIds": []
+        }
+      ],
+      "context": [],
+      "limitations": [
+        "Данных о ВВП и зарплатах нет; утверждать их рост нельзя.",
+        "Рост показателя первичной медицины не доказывает улучшения здоровья жителей.",
+        "Альтернативные наборы не рассчитаны, поэтому гарантированно лучший назвать нельзя."
+      ]
+    }
+  }
+]

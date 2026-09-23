@@ -3,11 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { dataset, exampleSelections, scenarioInput } from "@/data";
-import { simulate } from "@/engine";
+import { exampleSelections, scenarioInput } from "@/data";
 import { createStorage } from "@/storage";
-import { fallback } from "@/ai";
-import { startAnalysis, pollAnalysis, cancelAnalysis } from "@/backend";
+import { startAnalysis, pollAnalysis, cancelAnalysis, saveScenario, getScenario } from "@/backend";
 const provider = vi.hoisted(() => ({
   research: vi.fn(),
   explain: vi.fn(),
@@ -67,11 +65,9 @@ const research = {
   ],
 };
 function finalResponse() {
-  const result = simulate(scenarioInput(exampleSelections), dataset);
-  if (!result.valid) throw new Error("fixture");
   return {
     status: "completed",
-    output_text: JSON.stringify(fallback(result.report, "Test fixture")),
+    output_text: JSON.stringify({ summary: { text: "Сценарий улучшает положение Нуры.", factIds: ["score.after", "nura.score.after"], sourceIds: [] }, strengths: [], risks: [], recommendations: [], context: [], limitations: ["Эффекты синтетические."] }),
     usage: { input_tokens: 30, output_tokens: 15 },
   };
 }
@@ -178,4 +174,109 @@ describe("durable AI lifecycle with a fake provider (no network)", () => {
     expect(failed.error).toContain("лимит");
     expect(JSON.stringify(failed)).not.toContain("private-provider-details");
   });
+});
+
+it("deduplicates while a previous provider cancellation is still waiting", async () => {
+  const first = input();
+  await startAnalysis(first);
+  let release!: () => void;
+  provider.cancel.mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
+  const request = { ...input(), sessionId: first.sessionId };
+  const a = startAnalysis(request);
+  const b = startAnalysis(request);
+  release();
+  const [one, two] = await Promise.all([a, b]);
+  expect(one.id).toBe(two.id);
+  expect(provider.research).toHaveBeenCalledTimes(2);
+});
+
+it("does not launch a superseded job after awaited cancellation", async () => {
+  const first = input();
+  await startAnalysis(first);
+  let release!: () => void;
+  provider.cancel.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+  const older = startAnalysis({ ...input(), sessionId: first.sessionId });
+  const newer = await startAnalysis({ ...input(), sessionId: first.sessionId });
+  release();
+  expect((await older).status).toBe("cancelled");
+  expect(newer.status).toBe("pending");
+  expect(provider.research).toHaveBeenCalledTimes(2);
+});
+
+it("rejects request ID reuse with another question or session", async () => {
+  const request = input();
+  await startAnalysis(request);
+  await expect(startAnalysis({ ...request, question: "Другой вопрос" })).rejects.toMatchObject({ status: 409 });
+  await expect(startAnalysis({ ...request, sessionId: randomUUID() })).rejects.toMatchObject({ status: 409 });
+  expect(provider.research).toHaveBeenCalledTimes(1);
+});
+
+it("saves the final explanation, sources and server facts with the matching scenario", async () => {
+  const job = await startAnalysis(input());
+  provider.retrieve.mockResolvedValueOnce(research).mockResolvedValueOnce(finalResponse());
+  await pollAnalysis(job.id);
+  const completed = await pollAnalysis(job.id);
+  expect(completed.evidence?.find((f) => f.id === "score.after")?.value).toBeCloseTo(56.54307, 8);
+  const saved = saveScenario({ ...scenarioInput(exampleSelections), name: "С объяснением", analysisId: job.id });
+  expect(getScenario(saved.id).analysis).toEqual(completed);
+  expect(saved.analysis).not.toHaveProperty("providerId");
+  const other = exampleSelections.map((s) => s.measureId === "M10" ? { ...s, districtId: "esil" } : s);
+  expect(() => saveScenario({ ...scenarioInput(other), name: "Другой", analysisId: job.id })).toThrow("не относится");
+});
+
+it("rejects pending analyses when saving but still permits saving without AI", async () => {
+  const job = await startAnalysis(input());
+  expect(() => saveScenario({ ...scenarioInput(exampleSelections), name: "Ожидание", analysisId: job.id })).toThrow();
+  expect(saveScenario({ ...scenarioInput(exampleSelections), name: "Без AI" }).analysis).toBeUndefined();
+});
+
+it("keeps cancellation arriving during timeout cleanup", async () => {
+  const job = await startAnalysis(input());
+  updateJob(job.id, (j) => { j.createdAt = new Date(Date.now() - 240000).toISOString(); });
+  provider.retrieve.mockResolvedValue({ status: "in_progress" });
+  provider.cancel.mockImplementation(async () => { updateJob(job.id, (j) => { j.status = "cancelled"; }); });
+  expect((await pollAnalysis(job.id)).status).toBe("cancelled");
+});
+
+it("rejects forged numeric prose and exposes a labelled fallback", async () => {
+  const job = await startAnalysis(input());
+  provider.retrieve.mockResolvedValueOnce(research);
+  await pollAnalysis(job.id);
+  const fake = finalResponse();
+  const explanation = JSON.parse(fake.output_text);
+  explanation.summary.text = "Итоговый Score равен 99,99.";
+  provider.retrieve.mockResolvedValue({ ...fake, output_text: JSON.stringify(explanation) });
+  const result = await pollAnalysis(job.id);
+  expect(result.status).toBe("failed");
+  expect(result.mode).toBe("fallback");
+  expect(result.explanation?.summary.text).not.toContain("99,99");
+});
+
+it("does not revive a failed startup when the provider returns late", async () => {
+  let release!: (value: { id: string }) => void;
+  provider.research.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  const request = input();
+  const pending = startAnalysis(request);
+  const db = createStorage(filename);
+  const job = db.getRequest(request.requestId)!;
+  db.close();
+  updateJob(job.id, (j) => { j.createdAt = new Date(Date.now() - 40000).toISOString(); });
+  expect((await pollAnalysis(job.id)).status).toBe("failed");
+  release({ id: "late-research" });
+  expect((await pending).status).toBe("failed");
+  expect(provider.cancel).toHaveBeenCalledWith("late-research");
+  expect((await pollAnalysis(job.id)).status).toBe("failed");
+});
+
+it("resaves an older prompt only if its explanation passes current checks", async () => {
+  const job = await startAnalysis(input());
+  provider.retrieve.mockResolvedValueOnce(research).mockResolvedValueOnce(finalResponse());
+  await pollAnalysis(job.id);
+  await pollAnalysis(job.id);
+  updateJob(job.id, (j) => { j.promptVersion = "urban-advisor-2"; });
+  const saved = saveScenario({ ...scenarioInput(exampleSelections), name: "Проверенный архив", analysisId: job.id });
+  expect(saved.analysis?.promptVersion).toBe("urban-advisor-2");
+  expect(saved.analysis?.explanation?.summary.text).toContain("Нуры");
+  updateJob(job.id, (j) => { j.explanation!.summary.text = "Итоговый Score равен 99,99."; });
+  expect(() => saveScenario({ ...scenarioInput(exampleSelections), name: "Ошибочный архив", analysisId: job.id })).toThrow("текущую проверку");
 });

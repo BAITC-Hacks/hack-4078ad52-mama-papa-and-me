@@ -156,6 +156,7 @@ export interface AnalysisView {
   mode: "ai" | "fallback";
   explanation: Explanation | null;
   sources: Source[];
+  evidence?: ScenarioReport["facts"];
   error: string | null;
   usage: { input: number; output: number };
   model: string;
@@ -164,6 +165,7 @@ export interface AnalysisView {
 }
 export const saveScenarioSchema = scenarioSchema.extend({
   name: z.string().trim().min(1).max(80),
+  analysisId: z.string().uuid().nullable().optional(),
 });
 export interface SavedScenario {
   id: string;
@@ -171,4 +173,5 @@ export interface SavedScenario {
   createdAt: string;
   input: ScenarioInput;
   report: ScenarioReport;
+  analysis?: AnalysisView;
 }

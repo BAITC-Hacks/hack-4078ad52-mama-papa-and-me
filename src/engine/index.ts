@@ -202,6 +202,34 @@ export function simulate(
       value: after.critical,
     },
   ];
+  facts.push(
+    { id: "selection.count", text: "Количество выбранных мер", value: normalized.selections.length },
+    { id: "critical.before", text: "Критических показателей в исходном городе", value: initial.critical },
+    { id: "city.average", text: "Средний индекс с учётом населения", value: after.average },
+    { id: "city.minimum", text: "Индекс слабейшего района", value: after.minimum },
+  );
+  for (const d of after.districts) {
+    const before = initial.districts.find((b) => b.id === d.id)!;
+    facts.push(
+      { id: `${d.id}.score.before`, text: `${d.name}: индекс до`, value: before.score },
+      { id: `${d.id}.score.after`, text: `${d.name}: индекс после`, value: d.score },
+      { id: `${d.id}.score.delta`, text: `${d.name}: изменение индекса`, value: d.score - before.score },
+    );
+  }
+  for (const c of contributions) {
+    const m = data.measures.find((m) => m.id === c.measureId)!;
+    const d = data.districts.find((d) => d.id === c.districtId)!;
+    facts.push({ id: `effect.${m.id}.${d.id}.${c.indicator}`, text: `${m.name}, ${d.name}: вклад в ${c.indicator} после лага`, value: c.effect });
+  }
+  for (const s of normalized.selections) {
+    const m = data.measures.find((m) => m.id === s.measureId)!;
+    facts.push({ id: `cost.${m.id}`, text: `${m.name}: стоимость`, value: m.cost });
+  }
+  for (const synergy of data.synergies) {
+    const target = normalized.selections.find((s) => s.measureId === synergy.measures[0])?.districtId;
+    if (target && normalized.selections.some((s) => s.measureId === synergy.measures[1]))
+      facts.push({ id: `synergy.${synergy.measures.join(".")}.${target}`, text: `${synergy.measures.join(" + ")}, ${target}: бонус ${synergy.indicator}`, value: synergy.effect });
+  }
   for (const d of after.districts)
     for (const k of data.indicators) {
       facts.push({

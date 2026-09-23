@@ -23,3 +23,5 @@ Zod; ни одного другого модуля проекта. Нет env, S
 TypeScript strict и интеграционные проверки подмены полей/невалидного ввода. AI JSON проверяется explanationSchema.
 
 При изменении публичного интерфейса обновляйте contracts, потребителей и этот README. Команды проверки: npm test, npm run typecheck, npm run lint; UI дополнительно npm run test:e2e.
+
+AnalysisView.evidence содержит факты, процитированные объяснением. SaveScenario принимает только analysisId; текст/факты клиент передать не может. SavedScenario.analysis — необязательный снимок готового итогового разбора; старые записи без поля поддерживаются.

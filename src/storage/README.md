@@ -23,3 +23,5 @@ contracts, better-sqlite3, node:fs/path, server-only. Нет engine, AI или U
 Временные SQLite в Vitest: миграция, сохранение после закрытия/открытия, задания и дедупликация. Реальная база var/akim.sqlite исключена из Git.
 
 При изменении публичного интерфейса обновляйте contracts, потребителей и этот README. Команды проверки: npm test, npm run typecheck, npm run lint; UI дополнительно npm run test:e2e.
+
+Сценарий может содержать встроенный AnalysisView с объяснением, источниками и фактами. Хранится в существующем JSON payload: SQL-миграция не требуется. Старые сценарии без анализа читаются как раньше.

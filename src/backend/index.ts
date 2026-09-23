@@ -63,12 +63,33 @@ export function saveScenario(value: unknown) {
   const result = simulate(input, dataset, true);
   if (!result.valid)
     throw new HttpError(400, result.errors.map((e) => e.message).join(" "));
+  let analysis: AnalysisView | undefined;
+  if (parsed.analysisId) {
+    const job = storage().getJob(parsed.analysisId);
+    if (!job || job.kind !== "final" || !job.explanation ||
+        !["completed", "failed"].includes(job.status) ||
+        job.snapshotKey !== canonicalSelections(input.selections) ||
+        job.report.input.datasetVersion !== input.datasetVersion ||
+        job.report.input.rulesVersion !== input.rulesVersion)
+      throw new HttpError(400, "Объяснение не относится к этому итоговому сценарию. Сохраните без него или выполните новый разбор.");
+    // An older prompt does not invalidate a matching archive by itself.
+    // Recheck AI output with current guards before carrying it into a new save.
+    if (job.mode === "ai") {
+      try {
+        verifyExplanation(job.explanation, job.report, job.sources);
+      } catch {
+        throw new HttpError(400, "Сохранённый AI-ответ не прошёл текущую проверку. Выполните новый разбор.");
+      }
+    }
+    analysis = view(job);
+  }
   const saved = {
     id: randomUUID(),
     name: parsed.name,
     createdAt: new Date().toISOString(),
     input: result.report.input,
     report: result.report,
+    ...(analysis ? { analysis } : {}),
   };
   storage().saveScenario(saved);
   return saved;
@@ -100,6 +121,11 @@ function view(job: AnalysisJob): AnalysisView {
     mode,
     explanation,
     sources,
+    evidence: job.report.facts.filter((fact) => {
+      const e = job.explanation;
+      return e && [e.summary, ...e.strengths, ...e.risks, ...e.recommendations, ...e.context]
+        .some((claim) => claim.factIds.includes(fact.id));
+    }),
     error,
     usage,
     model,
@@ -124,6 +150,8 @@ function context(job: AnalysisJob) {
   };
 }
 function failed(job: AnalysisJob, message: string) {
+  const current = storage().getJob(job.id);
+  if (current && current.status !== "pending") return view(current);
   job.status = "failed";
   job.phase = "done";
   job.mode = "fallback";
@@ -157,7 +185,15 @@ export async function startAnalysis(value: unknown) {
   )
     throw new HttpError(400, "Неизвестная мера.");
   const duplicate = db.getRequest(request.requestId);
-  if (duplicate) return view(duplicate);
+  if (duplicate) {
+    const key = (r: typeof request) => JSON.stringify({ ...r,
+      selections: canonicalSelections(r.selections),
+      previousSelections: r.previousSelections ? canonicalSelections(r.previousSelections) : null,
+    });
+    if (key(duplicate.request) !== key(request))
+      throw new HttpError(409, "Идентификатор запроса уже использован для другого анализа.");
+    return view(duplicate);
+  }
   const input = {
     datasetVersion: request.datasetVersion,
     rulesVersion: request.rulesVersion,
@@ -196,8 +232,7 @@ export async function startAnalysis(value: unknown) {
       429,
       "Не больше шести анализов в минуту. Подождите немного.",
     );
-  for (const active of db.activeJobs(request.sessionId))
-    await cancelAnalysis(active.id);
+  const previousJobs = db.activeJobs(request.sessionId);
   const job: AnalysisJob = {
     id: randomUUID(),
     request,
@@ -220,6 +255,10 @@ export async function startAnalysis(value: unknown) {
   };
   // A durable row prevents a repeated browser submission from generating twice.
   db.insertJob(job);
+  // Reserve the request synchronously before any awaited provider cancellation.
+  // Concurrent requests see this job and can cancel/deduplicate it safely.
+  for (const active of previousJobs) await cancelAnalysis(active.id);
+  if (db.getJob(job.id)?.status !== "pending") return view(db.getJob(job.id)!);
   const config = getConfig();
   if (!config.aiEnabled || !config.apiKey)
     return failed(
@@ -233,7 +272,7 @@ export async function startAnalysis(value: unknown) {
       context(job),
       db.history(request.sessionId),
     );
-    if (db.getJob(job.id)?.status === "cancelled") {
+    if (db.getJob(job.id)?.status !== "pending") {
       await createAI(config)
         .cancel(response.id)
         .catch(() => {});
@@ -243,7 +282,7 @@ export async function startAnalysis(value: unknown) {
     db.saveJob(job);
     return view(job);
   } catch (error) {
-    if (db.getJob(job.id)?.status === "cancelled")
+    if (db.getJob(job.id)?.status !== "pending")
       return view(db.getJob(job.id)!);
     return failed(job, safeAIError(error));
   }
