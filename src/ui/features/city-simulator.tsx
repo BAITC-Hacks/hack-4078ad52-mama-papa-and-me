@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -55,6 +54,7 @@ import {
 import { categories, dataset, exampleSelections, scenarioInput } from "@/data";
 import { canonicalSelections, simulate, validate } from "@/engine";
 import { Button } from "../components/button";
+import { MeasureCard } from "../components/measure-card";
 import { CityMap } from "./city-map";
 
 const icons = {
@@ -69,8 +69,8 @@ const fmt = (n: number, digits = 2) =>
     maximumFractionDigits: digits,
     minimumFractionDigits: digits,
   });
-const draftKey = "akim-draft-v1";
-async function api<T>(
+export type ApiClient = <T>(url: string, method?: string, value?: unknown) => Promise<T>;
+async function httpApi<T>(
   url: string,
   method = "GET",
   value?: unknown,
@@ -87,7 +87,18 @@ async function api<T>(
   return result as T;
 }
 
-export function CitySimulator() {
+export function CitySimulator({ apiClient = httpApi, demo = false }: {
+  apiClient?: ApiClient;
+  demo?: boolean;
+}) {
+  const api = apiClient;
+  const storagePrefix = demo ? "akim-preview" : "akim";
+  const draftKey = `${storagePrefix}-draft-v1`;
+  const [showGuide, setShowGuide] = useState(false);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [savedError, setSavedError] = useState("");
+  const mainRef = useRef<HTMLElement | null>(null);
+  const previousTab = useRef("city");
   const [selections, setSelections] = useState<Selection[]>([]),
     [selectedDistrict, setSelectedDistrict] = useState("nura");
   const [category, setCategory] = useState<Category | "all">("all"),
@@ -128,6 +139,13 @@ export function CitySimulator() {
   const catalog = dataset.measures.filter(
     (m) => category === "all" || m.category === category,
   );
+  useEffect(() => {
+    if (previousTab.current !== tab) {
+      previousTab.current = tab;
+      mainRef.current?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+  }, [tab]);
 
   // Browser storage is restored once after hydration; the extra render is intentional.
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -135,11 +153,11 @@ export function CitySimulator() {
     session.current = crypto.randomUUID();
     try {
       session.current =
-        sessionStorage.getItem("akim-session") || session.current;
-      sessionStorage.setItem("akim-session", session.current);
+        sessionStorage.getItem(`${storagePrefix}-session`) || session.current;
+      sessionStorage.setItem(`${storagePrefix}-session`, session.current);
     } catch {}
     try {
-      const id = sessionStorage.getItem("akim-active-analysis");
+      const id = sessionStorage.getItem(`${storagePrefix}-active-analysis`);
       if (id) {
         void api<AnalysisView>(`/api/analyses/${id}`)
           .then((job) => {
@@ -169,7 +187,7 @@ export function CitySimulator() {
     void api<typeof status>("/api/status")
       .then(setStatus)
       .catch(() => setError("Не удалось проверить состояние сервера."));
-  }, []);
+  }, [api, draftKey, storagePrefix]);
   useEffect(() => {
     if (loaded) {
       try {
@@ -181,7 +199,7 @@ export function CitySimulator() {
         setNotice("Браузер не разрешил сохранить черновик.");
       }
     }
-  }, [selections, loaded]);
+  }, [selections, loaded, draftKey]);
   /* eslint-enable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!analysis || analysis.status !== "pending") return;
@@ -207,7 +225,7 @@ export function CitySimulator() {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [analysis]);
+  }, [analysis, api]);
 
   useEffect(() => {
     if (!advisor) return;
@@ -249,7 +267,7 @@ export function CitySimulator() {
   function stopAnalysis() {
     generation.current++;
     try {
-      sessionStorage.removeItem("akim-active-analysis");
+      sessionStorage.removeItem(`${storagePrefix}-active-analysis`);
     } catch {}
     const id = activeId.current;
     activeId.current = null;
@@ -291,7 +309,7 @@ export function CitySimulator() {
       setAnalysis(response);
       activeId.current = response.status === "pending" ? response.id : null;
       try {
-        sessionStorage.setItem("akim-active-analysis", response.id);
+        sessionStorage.setItem(`${storagePrefix}-active-analysis`, response.id);
       } catch {}
     } catch (e) {
       if (token === generation.current) setError((e as Error).message);
@@ -358,6 +376,7 @@ export function CitySimulator() {
   async function run() {
     setBusy(true);
     setError("");
+    setNotice("");
     const token = generation.current;
     try {
       const result = await api<ScenarioReport>("/api/simulate", "POST", {
@@ -382,7 +401,7 @@ export function CitySimulator() {
         ...scenarioInput(selections),
         name: scenarioName,
       });
-      setNotice("Сценарий сохранён на этом компьютере.");
+      setNotice(demo ? "Сценарий сохранён в этом браузере." : "Сценарий сохранён на этом компьютере.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -391,11 +410,14 @@ export function CitySimulator() {
   }
   async function openSaved() {
     setTab("saved");
-    setError("");
+    setSavedError("");
+    setSavedLoading(true);
     try {
       setSaved(await api<SavedScenario[]>("/api/scenarios"));
     } catch (e) {
-      setError((e as Error).message);
+      setSavedError((e as Error).message);
+    } finally {
+      setSavedLoading(false);
     }
   }
   async function restore(s: SavedScenario) {
@@ -416,34 +438,44 @@ export function CitySimulator() {
   const pending = starting || analysis?.status === "pending";
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">Перейти к содержимому</a>
+      {demo && <div className="demo-banner">Демо интерфейса · расчёт по модели проекта · сохранение в этом браузере · без подключения AI</div>}
       <header className="topbar">
-        <Link className="brand" href="/" aria-label="Аким на 5 часов, главная">
+        <button className="brand" onClick={() => setTab("city")} aria-label="Аким на 5 часов, главная">
           <span className="brand-symbol">
             <Building2 size={22} />
           </span>
           <span>
             аким<span className="brand-sub">на 5 часов</span>
           </span>
-        </Link>
+        </button>
         <nav aria-label="Разделы">
           <button
             className={tab === "city" ? "nav-active" : ""}
+            aria-current={tab === "city" ? "page" : undefined}
             onClick={() => setTab("city")}
           >
-            Городская лаборатория
+            Город
+          </button>
+          <button
+            className={tab === "result" ? "nav-active" : ""}
+            aria-current={tab === "result" ? "page" : undefined}
+            disabled={!serverReport}
+            title={serverReport ? "Открыть рассчитанный результат" : "Сначала выберите пять решений и рассчитайте результат"}
+            onClick={() => setTab("result")}
+          >
+            Результат
           </button>
           <button
             className={tab === "saved" ? "nav-active" : ""}
+            aria-current={tab === "saved" ? "page" : undefined}
             onClick={() => void openSaved()}
           >
             Мои сценарии
           </button>
         </nav>
         <div className="header-right">
-          <span className="local-badge">
-            <i />
-            Локальная сессия
-          </span>
+          <button className="guide-toggle" aria-label="Как играть" aria-expanded={showGuide} aria-controls="game-guide" onClick={() => setShowGuide(!showGuide)}><CircleHelp size={19} /><span>Как играть</span></button>
           <button
             className="avatar"
             onClick={() => ask()}
@@ -453,15 +485,25 @@ export function CitySimulator() {
           </button>
         </div>
       </header>
-      <main>
+      <main ref={mainRef} id="main-content" tabIndex={-1}>
+        {showGuide && <section className="game-guide panel" id="game-guide" aria-label="Как играть">
+          <div className="section-heading"><div><span className="kicker">ВСЁ ПРОЩЕ, ЧЕМ КАЖЕТСЯ</span><h2>Три шага к вашему городу</h2></div><button className="guide-toggle" aria-label="Закрыть инструкцию" onClick={() => setShowGuide(false)}><X size={20} /></button></div>
+          <div className="guide-grid">
+            <div><span>01</span><h3>Изучите районы</h3><p>Выберите район на карте. Показатели подскажут, где помощь нужнее всего.</p></div>
+            <div><span>02</span><h3>Соберите пять решений</h3><p>У вас 100 единиц бюджета. Можно выбрать не больше двух инициатив одного направления.</p></div>
+            <div><span>03</span><h3>Сравните результат</h3><p>Узнайте, что изменится за два условных года, и сохраните удачный сценарий.</p></div>
+          </div>
+          <p className="guide-footnote">Это учебная модель на синтетических данных. Показатели помогают сравнивать решения внутри игры.</p>
+        </section>}
+        {tab === "city" && <>
         <div className="page-intro">
           <div>
             <div className="eyebrow">
               <span /> АСТАНА · СИМУЛЯТОР РЕШЕНИЙ
             </div>
             <h1>
-              Большой город.
-              <br className="mobile-break" /> Ваши решения.
+              Большой город.{" "}
+              <span className="headline-accent">Ваши решения.</span>
             </h1>
             <p>
               Пять инициатив. Один бюджет. Сделайте город лучше для каждого.
@@ -505,7 +547,7 @@ export function CitySimulator() {
           <div className="metric">
             <div className="metric-label">
               <Compass size={15} />
-              Исходный Quality of Life
+              Индекс качества жизни
             </div>
             <div className="metric-value">
               {fmt(report.baseline.score)}
@@ -524,6 +566,12 @@ export function CitySimulator() {
             <small>Учитываем время реализации</small>
           </div>
         </section>
+        <nav className="journey-nav" aria-label="Шаги сценария">
+          <a href="#city-map"><span>01</span><div><strong>Изучите город</strong><small>5 районов и их приоритеты</small></div><ArrowRight size={18} /></a>
+          <a href="#initiatives"><span>02</span><div><strong>Выберите решения</strong><small>{selections.length} из 5 в вашем сценарии</small></div><ArrowRight size={18} /></a>
+          <button onClick={() => void run()} disabled={selections.length !== 5 || busy}><span>03</span><div><strong>Посмотрите результат</strong><small>{selections.length === 5 ? "Сценарий готов к расчёту" : "Сначала соберите пять решений"}</small></div><ArrowRight size={18} /></button>
+        </nav>
+        </>}
         {error && (
           <div className="alert error" role="alert">
             <CircleHelp size={18} />
@@ -548,7 +596,7 @@ export function CitySimulator() {
         {tab === "city" && (
           <>
             <div className="workspace-grid">
-              <section className="panel map-panel">
+              <section className="panel map-panel" id="city-map">
                 <div className="section-heading">
                   <div>
                     <span className="kicker">01 / ИЗУЧИТЕ ГОРОД</span>
@@ -561,6 +609,9 @@ export function CitySimulator() {
                   onSelect={setSelectedDistrict}
                   report={report}
                 />
+                <div className="district-switcher" role="group" aria-label="Выбор района">
+                  {dataset.districts.map((item) => <button key={item.id} aria-pressed={item.id === selectedDistrict} onClick={() => setSelectedDistrict(item.id)}>{item.name}</button>)}
+                </div>
                 <div className="district-detail">
                   <div>
                     <div className="district-title">
@@ -698,8 +749,12 @@ export function CitySimulator() {
                 {selections.length !== 5 && (
                   <small className="helper">
                     Добавьте ещё {5 - selections.length} инициатив
-                    {5 - selections.length === 1 ? "у" : "ы"} для итогового
-                    расчёта
+                    {5 - selections.length === 1
+                      ? "у"
+                      : selections.length === 0
+                        ? ""
+                        : "ы"}{" "}
+                    для итогового расчёта
                   </small>
                 )}
                 <div className="portfolio-tools">
@@ -743,7 +798,7 @@ export function CitySimulator() {
                 </div>
               </aside>
             </div>
-            <section className="catalog-section">
+            <section className="catalog-section" id="initiatives">
               <div className="section-heading">
                 <div>
                   <span className="kicker">ОТ ПРИОРИТЕТОВ К ДЕЙСТВИЯМ</span>
@@ -754,9 +809,14 @@ export function CitySimulator() {
                   <strong>{district.name}</strong>
                 </span>
               </div>
+              <p className="catalog-help">
+                Наведите на карточку или нажмите «Подробнее о решении», чтобы
+                увидеть описание.
+              </p>
               <div className="filters" role="group" aria-label="Направления">
                 <button
                   className={category === "all" ? "active" : ""}
+                  aria-pressed={category === "all"}
                   onClick={() => setCategory("all")}
                 >
                   Все направления <span>14</span>
@@ -767,6 +827,7 @@ export function CitySimulator() {
                     <button
                       key={c.id}
                       className={category === c.id ? "active" : ""}
+                      aria-pressed={category === c.id}
                       onClick={() => setCategory(c.id)}
                     >
                       <Icon size={15} />
@@ -795,25 +856,43 @@ export function CitySimulator() {
                           false,
                         )[0]?.message;
                   return (
-                    <article
-                      className={`measure-card ${chosen ? "chosen" : ""}`}
+                    <MeasureCard
+                      category={m.category}
+                      chosen={chosen}
+                      name={m.name}
                       key={m.id}
+                      heading={
+                        <>
+                          <div className="measure-top">
+                            <span
+                              className="measure-icon"
+                              style={{ color: c.color, background: `${c.color}13` }}
+                            >
+                              <Icon size={20} />
+                            </span>
+                            <span className="measure-category">{c.short}</span>
+                            <span className="measure-price">
+                              {m.cost}
+                              <small> ед.</small>
+                            </span>
+                          </div>
+                          <h3>{m.name}</h3>
+                        </>
+                      }
+                      description={
+                        <>
+                          <p>{m.description}</p>
+                          <p className="measure-description-context">
+                            {m.scope === "city"
+                              ? "Действует во всех районах города."
+                              : `Действует в районе ${district.name}. Район можно изменить в вашем сценарии.`}{" "}
+                            {m.lag === 0
+                              ? "Эффект начинается сразу."
+                              : `Эффект начинается после ${m.lag} ${m.lag === 1 ? "квартала" : "кварталов"}.`}
+                          </p>
+                        </>
+                      }
                     >
-                      <div className="measure-top">
-                        <span
-                          className="measure-icon"
-                          style={{ color: c.color, background: `${c.color}13` }}
-                        >
-                          <Icon size={20} />
-                        </span>
-                        <span className="measure-category">{c.short}</span>
-                        <span className="measure-price">
-                          {m.cost}
-                          <small> ед.</small>
-                        </span>
-                      </div>
-                      <h3>{m.name}</h3>
-                      <p>{m.description}</p>
                       <div className="measure-meta">
                         <span>
                           <MapPin size={12} />
@@ -821,7 +900,9 @@ export function CitySimulator() {
                         </span>
                         <span>
                           <Clock3 size={12} />
-                          Лаг {m.lag} кв.
+                          {m.lag === 0
+                            ? "Эффект сразу"
+                            : `Эффект через ${m.lag} кв.`}
                         </span>
                       </div>
                       <div className="effect-chips">
@@ -861,7 +942,7 @@ export function CitySimulator() {
                       {reason && !chosen && (
                         <small className="blocked-reason">{reason}</small>
                       )}
-                    </article>
+                    </MeasureCard>
                   );
                 })}
               </div>
@@ -884,6 +965,7 @@ export function CitySimulator() {
               );
             }}
             busy={busy}
+            demo={demo}
           />
         )}
         {tab === "saved" && (
@@ -891,23 +973,25 @@ export function CitySimulator() {
             <div className="section-heading">
               <div>
                 <span className="kicker">ЛОКАЛЬНЫЙ АРХИВ</span>
-                <h2>Мои сценарии</h2>
+                <h1>Мои сценарии</h1>
+                <p className="saved-intro">Ваши идеи для города — к каждой можно вернуться.</p>
               </div>
               <Button variant="outline" onClick={() => setTab("city")}>
                 Вернуться к городу
                 <ArrowRight size={16} />
               </Button>
             </div>
-            {saved.length === 0 ? (
+            {savedLoading ? <div className="empty-state" role="status"><LoaderCircle className="spin" size={32} /><h3>Загружаем ваши сценарии</h3></div> : savedError ? <div className="empty-state" role="alert"><CircleHelp size={32} /><h3>Не удалось открыть архив</h3><p>{savedError}</p><Button variant="outline" onClick={() => void openSaved()}>Попробовать снова</Button></div> : saved.length === 0 ? (
               <div className="empty-state">
                 <FolderOpen size={38} />
                 <h3>Здесь будут ваши решения</h3>
                 <p>
                   Соберите пять мер, рассчитайте результат и сохраните сценарий.
                 </p>
+                <Button onClick={() => setTab("city")}>Собрать первый сценарий <ArrowRight size={17} /></Button>
               </div>
             ) : (
-              saved.map((s) => (
+              <div className="saved-grid">{saved.map((s) => (
                 <button
                   className="saved-row"
                   onClick={() => void restore(s)}
@@ -923,10 +1007,10 @@ export function CitySimulator() {
                       {s.report.cost} ед.
                     </span>
                   </div>
-                  <b>{fmt(s.report.score!)}</b>
+                  <b><small>Индекс города</small>{fmt(s.report.score!)}<small className={s.report.delta! < 0 ? "critical" : "positive"}>{s.report.delta! >= 0 ? "+" : ""}{fmt(s.report.delta!)} к исходному</small></b>
                   <ChevronRight size={20} />
                 </button>
-              ))
+              ))}</div>
             )}
           </section>
         )}
@@ -964,7 +1048,7 @@ export function CitySimulator() {
               </div>
               <div>
                 <h2>Городской советник</h2>
-                <p>Astra · medium · исследование источников</p>
+                <p>Понятно о пользе, рисках и последствиях</p>
               </div>
               <button
                 aria-label="Закрыть советника"
@@ -995,7 +1079,7 @@ export function CitySimulator() {
                   </p>
                   {[
                     "Как парки и спорт-зоны влияют на городскую среду?",
-                    "Какие проблемы сейчас важнее для Нуры?",
+                    `Какие проблемы сейчас важнее для района ${district.name}?`,
                     "Что учесть при выборе между автобусами и ЛРТ?",
                   ].map((q) => (
                     <button key={q} onClick={() => setQuestion(q)}>
@@ -1023,7 +1107,7 @@ export function CitySimulator() {
                 </div>
               )}
               {analysis && analysisCurrent && analysis.explanation && (
-                <ExplanationPanel analysis={analysis} />
+                <ExplanationPanel analysis={analysis} demo={demo} />
               )}
               {analysis && !analysisCurrent && (
                 <p className="alert notice">
@@ -1054,7 +1138,7 @@ export function CitySimulator() {
                 rows={3}
               />
               <div>
-                <small>Ответ с источниками · AI может ошибаться</small>
+                <small>{demo ? "Демо-справка · без AI и веб-поиска" : "Ответ с источниками · AI может ошибаться"}</small>
                 <Button
                   size="sm"
                   type="submit"
@@ -1080,6 +1164,7 @@ function Result({
   onBack,
   onAnalyze,
   busy,
+  demo,
 }: {
   report: ScenarioReport;
   name: string;
@@ -1088,6 +1173,7 @@ function Result({
   onBack: () => void;
   onAnalyze: () => void;
   busy: boolean;
+  demo: boolean;
 }) {
   const rows = report.districts.map((d) => ({
     name: d.name,
@@ -1101,14 +1187,13 @@ function Result({
       <div className="result-hero">
         <div>
           <span className="kicker">ВАШ СЦЕНАРИЙ · 8 КВАРТАЛОВ СПУСТЯ</span>
-          <h2>
+          <h1>
             Решения, которые
             <br />
             меняют город.
-          </h2>
+          </h1>
           <p>
-            Расчёт по исходному датасету. Все пять инициатив прошли серверную
-            проверку.
+            {demo ? "Расчёт по модели проекта выполнен в браузере." : "Все пять инициатив прошли серверную проверку."} Сравните, как ваш выбор повлиял на каждый район.
           </p>
           <Button variant="outline" onClick={onBack}>
             Изменить решения
@@ -1116,7 +1201,7 @@ function Result({
           </Button>
         </div>
         <div className="score-display">
-          <span>Astana Quality of Life Score</span>
+          <span>Индекс качества жизни города</span>
           <strong data-testid="final-score">{fmt(report.score!)}</strong>
           <b>
             {report.delta! >= 0 ? "+" : ""}
@@ -1127,6 +1212,14 @@ function Result({
           </small>
         </div>
       </div>
+      <section className="result-decisions panel" aria-label="Решения в расчёте">
+        <div className="section-heading"><div><span className="kicker">ВАШ ВКЛАД В ГОРОД</span><h2>Пять решений. Один сценарий.</h2></div><span className="pill">{report.cost} из 100 ед.</span></div>
+        <div className="decision-recap">{report.input.selections.map((selection, index) => {
+          const measure = dataset.measures.find(item => item.id === selection.measureId)!;
+          const Icon = icons[measure.category];
+          return <div key={measure.id}><span className="recap-number">0{index + 1}</span><Icon size={22} /><strong>{measure.name}</strong><small>{selection.districtId ? dataset.districts.find(item => item.id === selection.districtId)?.name : "Весь город"}</small><b>{measure.cost} ед.</b></div>;
+        })}</div>
+      </section>
       <div className="result-grid">
         <div className="panel">
           <div className="section-heading">
@@ -1180,7 +1273,7 @@ function Result({
                     <td>{d.name}</td>
                     <td>{fmt(original.score)}</td>
                     <td>{fmt(d.score)}</td>
-                    <td className="positive">
+                    <td className={d.score < original.score ? "critical" : "positive"}>
                       {d.score >= original.score ? "+" : ""}
                       {fmt(d.score - original.score)}
                     </td>
@@ -1209,7 +1302,7 @@ function Result({
               <span>Слабейший район</span>
               <strong>{fmt(report.minimum)}</strong>
             </div>
-            <h4>Сработавшие синергии</h4>
+            <h4>Решения усиливают друг друга</h4>
             {report.synergies.length ? (
               report.synergies.map((s) => (
                 <p className="synergy" key={s}>
@@ -1229,6 +1322,7 @@ function Result({
           </div>
           <div className="panel">
             <h3>Сохранить эту версию</h3>
+            <p className="save-hint">Дайте сценарию имя, чтобы позже найти его в разделе «Мои сценарии».</p>
             <label className="field-label" htmlFor="scenario-name">
               Название сценария
             </label>
@@ -1245,13 +1339,13 @@ function Result({
               disabled={busy || !name.trim()}
             >
               <Save size={16} />
-              Сохранить на компьютере
+              {demo ? "Сохранить в браузере" : "Сохранить на компьютере"}
             </Button>
           </div>
         </div>
       </div>
-      <div className="panel detailed-results">
-        <h3>Показатели до и после</h3>
+      <details className="panel detailed-results">
+        <summary><h3>Показатели до и после</h3><span>Подробно по каждому району <ChevronRight size={18} /></span></summary>
         <div className="table-scroll">
           <table>
             <thead>
@@ -1287,12 +1381,12 @@ function Result({
             </tbody>
           </table>
         </div>
-      </div>
+      </details>
     </section>
   );
 }
 
-function ExplanationPanel({ analysis }: { analysis: AnalysisView }) {
+function ExplanationPanel({ analysis, demo }: { analysis: AnalysisView; demo: boolean }) {
   const e = analysis.explanation!;
   function claim(c: Explanation["summary"], i: number) {
     return (
@@ -1319,7 +1413,7 @@ function ExplanationPanel({ analysis }: { analysis: AnalysisView }) {
       <span
         className={`answer-badge ${analysis.mode === "fallback" ? "fallback" : ""}`}
       >
-        {analysis.mode === "ai"
+        {demo ? "Демо-справка" : analysis.mode === "ai"
           ? "AI-анализ с источниками"
           : "Шаблонное объяснение"}
       </span>

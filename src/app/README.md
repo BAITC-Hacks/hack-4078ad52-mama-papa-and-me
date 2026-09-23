@@ -8,7 +8,9 @@
 
 ## Внутренняя структура
 
-layout.tsx, page.tsx, api/http.ts и api/{simulate,analyses,scenarios,status}.
+layout.tsx, page.tsx, preview/page.tsx, api/http.ts и api/{simulate,analyses,scenarios,status}.
+
+`/` — основное приложение с серверным API. `/preview` — тот же frontend с явно обозначенным автономным режимом: engine считает в браузере, сценарии сохраняются отдельно в localStorage, AI не вызывается. PreviewApp приходит через публичный экспорт UI.
 
 ## Публичный интерфейс
 
