@@ -1,25 +1,25 @@
 # Локальное хранение
 
-Статус: архитектурный каркас. Исполняемая реализация отсутствует. Этапы — в [plans.md](../../plans.md); общие границы — в [карте архитектуры](../../docs/architecture/README.md).
+Актуальный прогресс — в [plans.md](../../plans.md), зависимости — в [карте архитектуры](../../docs/architecture/README.md).
 
 ## Ответственность
 
-SQLite-адаптер, репозитории сценариев и объяснений, версии схемы и миграции.
+SQLite-репозитории сценариев и AI-задач; миграция и lease переходов.
 
 ## Внутренняя структура
 
-Интерфейсы репозиториев, адаптер и migrations/ появятся на P6. Файл БД — var/akim.sqlite.
+index.ts: createStorage, SQL, JSON payload, user_version=1, WAL и busy_timeout 5 секунд.
 
 ## Публичный интерфейс
 
-save/load/list сценариев и результатов; backend передаёт проверенные данные и путь БД.
+save/get/listScenario, insert/save/getJob, getRequest, history, activeJobs, countRecent, lock/unlock, close. Путь передаётся аргументом.
 
 ## Зависимости
 
-contracts и SQLite-драйвер. Не вызывает engine, ai или UI.
+contracts, better-sqlite3, node:fs/path, server-only. Нет engine, AI или UI.
 
 ## Проверки при реализации
 
-Миграция пустой БД, перезапуск, временная БД в тестах, ошибка записи; не удалять данные при обновлении схемы.
+Временные SQLite в Vitest: миграция, сохранение после закрытия/открытия, задания и дедупликация. Реальная база var/akim.sqlite исключена из Git.
 
-Команды тестов появятся вместе с кодом. Изменение интерфейса сопровождается обновлением этого README, contracts и затронутых потребителей.
+При изменении публичного интерфейса обновляйте contracts, потребителей и этот README. Команды проверки: npm test, npm run typecheck, npm run lint; UI дополнительно npm run test:e2e.

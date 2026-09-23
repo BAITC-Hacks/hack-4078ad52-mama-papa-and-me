@@ -1,5 +1,5 @@
 # UI: components
 
-Переиспользуемые элементы интерфейса и shadcn/ui; без бизнес-формул.
+button.tsx — Button с Radix Slot и вариантами cva; utils.ts — cn для классов. Без формул и HTTP.
 
-Статус: только каркас. Общий интерфейс, зависимости и проверки — в [README UI](../README.md).
+Границы и проверки — в [README UI](../README.md).

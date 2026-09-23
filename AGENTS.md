@@ -9,16 +9,16 @@
 - Текущий запрос пользователя определяет объём работы в рамках системных и платформенных правил. Новое решение пользователя важнее старого плана; запиши изменение в журнал решений.
 - Читай подробности и README модулей по задаче. Полная перечитка репозитория перед каждой правкой не нужна.
 - Доводи согласованный этап до его критериев готовности: реализуй, проверь, исправь свои ошибки, зафиксируй результат. Рутинные обратимые действия внутри запроса не требуют повторного согласования.
-- Порядок разработки: сначала работающий фронтенд с mock-данными, просмотр владельцем, затем backend. Не начинай следующий этап только потому, что он указан в дорожной карте.
+- По последнему запросу владельца реализуется полный локальный MVP: интерфейс, движок, backend, AI с веб-поиском, SQLite и проверки. Промежуточный просмотр mock-UI больше не блокирует backend. Следующий объём работ не выводи только из дорожной карты.
 - Различай «согласовано», «реализовано», «проверено» и «не проверено». Нельзя объявлять тесты, доступы или функции работающими без фактического подтверждения.
 
 ## Стек и запуск
 
-Целевой стек: Next.js App Router, React, TypeScript strict, Tailwind CSS, shadcn/ui, Lucide, Recharts. Сервер — Next.js Route Handlers с Zod; AI — официальный OpenAI SDK, Responses API и `gpt-6-astra`; хранение — локальная SQLite. Черновик UI — localStorage. Проверки приложения — Vitest и Playwright.
+Стек: Next.js App Router, React, TypeScript strict, Tailwind CSS, shadcn/ui, Lucide, Recharts. Сервер — Next.js Route Handlers с Zod; AI — официальный OpenAI SDK, Responses API и `gpt-6-astra`; хранение — локальная SQLite. Черновик UI — localStorage. Проверки приложения — Vitest и Playwright.
 
 Одно приложение запускается на компьютере, сервер слушает `127.0.0.1`. Внешний сервис для AI — OpenAI API; сама модель не запускается локально. Реализованная симуляция должна работать без интернета. Облачный хостинг и облачная база не входят в текущий план.
 
-Менеджер пакетов — npm, один package-lock.json. Сейчас package.json и приложения нет. Команды dev/build/start/lint/typecheck/test/test:e2e добавляются и проверяются на соответствующих этапах; до этого не представляй их как доступные. При scaffold фиксируй совместимые версии в manifest и lock-файле, проверяя официальную документацию.
+Менеджер пакетов — npm 11.20.0, один package-lock.json; Node.js 22.20+. Установка: `npx --yes npm@11.20.0 ci`. Команды dev/build/start/lint/typecheck/test/test:e2e реализованы. Данные и документация проверяются через check:data/check:docs. Состояние последних проверок — в plans.md. При смене зависимостей сохраняй согласованность manifest/lock и проверяй совместимость.
 
 Не меняй стек или модель молча. Серверная переменная OPENAI_MODEL имеет проектный default `gpt-6-astra`; при её недоступности используется явно обозначенное шаблонное объяснение. Этот файл не переключает модель сессии Codex.
 
@@ -35,11 +35,11 @@
 | src/data | Версионируемые районы, показатели, меры и правила |
 | src/contracts | Общие типы и схемы; не зависят от других модулей |
 | src/config | Проверенная конфигурация окружения, только на сервере |
-| src/mocks | Явно обозначенные прототипные fixtures и адаптеры |
+| src/mocks | Зарезервирован для будущих демонстраций; runtime не использует mocks |
 
 В каждом модуле читай README перед его существенным изменением и обновляй его при изменении интерфейса. Направления зависимостей зафиксированы в [карте архитектуры](docs/architecture/README.md). Используй публичные точки входа модулей, избегай циклов и импорта их внутренних файлов.
 
-UI не импортирует backend, AI, storage или серверную конфигурацию. Чистый engine разрешён для предварительного расчёта в UI, но сервер повторно проверяет исходный выбор. Route Handlers не содержат бизнес-логику. Защиту server-only и правила импортов добавить при scaffold, не считать её уже реализованной.
+UI не импортирует backend, AI, storage или серверную конфигурацию. Чистый engine разрешён для предварительного расчёта в UI, но сервер повторно проверяет исходный выбор. Route Handlers не содержат бизнес-логику. Серверные модули используют server-only; ESLint ограничивает импорты UI и движка. При изменении границ обновляй проверки.
 
 ## Инварианты симулятора
 
@@ -68,3 +68,13 @@ UI не импортирует backend, AI, storage или серверную к
 Сохраняй чужую работу и локальные секреты. Новые ветки — `codex/<task>`. Не соединяй несвязанные Git-истории и не делай force-push без отдельного явного запроса. Имя инструкции — ровно AGENTS.md, без соседнего дубликата agents.md. Исторический документ ролей не задаёт действующие правила.
 
 Основание: [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), [инструкции для Astra](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra), [этапы и проверки Codex](https://developers.openai.com/blog/run-long-horizon-tasks-with-codex). Проверено 2026-09-23. Подробный план хранится отдельно, чтобы постоянные инструкции оставались компактными.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

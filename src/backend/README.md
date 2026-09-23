@@ -1,25 +1,25 @@
 # Серверные сценарии
 
-Статус: архитектурный каркас. Исполняемая реализация отсутствует. Этапы — в [plans.md](../../plans.md); общие границы — в [карте архитектуры](../../docs/architecture/README.md).
+Актуальный прогресс — в [plans.md](../../plans.md), зависимости — в [карте архитектуры](../../docs/architecture/README.md).
 
 ## Ответственность
 
-Проверка входа и версий, доверенный расчёт, запуск AI и сохранение через репозитории.
+Проверка ввода, доверенный расчёт, координация AI и SQLite.
 
 ## Внутренняя структура
 
-Сценарии simulate/explain/save и их зависимости будут разделены внутри модуля при реализации.
+index.ts: сценарии, ошибки, durable AI lifecycle; миграция и SQL скрыты в storage.
 
 ## Публичный интерфейс
 
-ScenarioInput → ScenarioReport; анализ → статус/объяснение; сохранение → идентификатор сценария.
+runSimulation, saveScenario, getScenario, listScenarios; startAnalysis, pollAnalysis, cancelAnalysis; systemStatus; HttpError.
 
 ## Зависимости
 
-contracts, data, engine, ai, storage, config. Не зависит от UI.
+contracts, data, engine, ai, storage, config. server-only; UI не импортируется.
 
 ## Проверки при реализации
 
-Подмена цены/Score, невалидный ввод, отказ AI/БД, версии, отсутствие лишнего платного вызова.
+Vitest: подмена данных, контрольный расчёт, сохранение, idempotency, два AI-этапа, отмена/таймаут/поздний ответ/ошибка; сеть заменяется fake provider.
 
-Команды тестов появятся вместе с кодом. Изменение интерфейса сопровождается обновлением этого README, contracts и затронутых потребителей.
+При изменении публичного интерфейса обновляйте contracts, потребителей и этот README. Команды проверки: npm test, npm run typecheck, npm run lint; UI дополнительно npm run test:e2e.

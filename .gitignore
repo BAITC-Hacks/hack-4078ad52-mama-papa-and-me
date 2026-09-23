@@ -33,3 +33,6 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+
+# Isolated browser-test build output
+/.next-e2e/

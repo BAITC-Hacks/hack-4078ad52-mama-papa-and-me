@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only checks for the documentation scaffold; not application tests."""
+"""Read-only documentation, source-secret-pattern and ignore checks; not application tests."""
 from pathlib import Path
 import re
 import subprocess
@@ -73,8 +73,11 @@ def main():
     result = subprocess.run(['git', 'check-ignore', '--no-index', '-q', '.env.example'], cwd=ROOT)
     require(result.returncode == 1, '.env.example must remain versionable')
 
-    # Scan only repository documentation/scripts and the empty template, never a local .env.
+    # Scan public source and documentation, never local .env or generated bundles.
     candidates = markdown + sorted((ROOT / 'scripts').glob('*.py')) + [ROOT / '.env.example']
+    for directory in ['src', 'tests']:
+        candidates.extend(p for p in (ROOT / directory).rglob('*') if p.suffix in {'.ts', '.tsx', '.css'})
+    candidates.extend(p for p in ROOT.iterdir() if p.is_file() and p.suffix in {'.ts', '.mjs', '.json'})
     patterns = [r'\bsk-[A-Za-z0-9_-]{20,}', r'\bgh[pousr]_[A-Za-z0-9]{20,}',
                 r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----']
     for path in candidates:
@@ -82,7 +85,7 @@ def main():
                 f'Possible credential in {path.relative_to(ROOT)} (value suppressed)')
     print(f'PASS: {len(MODULES)} module READMEs, {len(markdown)} Markdown files, '
           f'{checked_links} local links, AGENTS.md case, env template and Git exclusions.')
-    print('PASS: no known credential patterns in documentation/scripts/template.')
+    print('PASS: no known credential patterns in source/docs/scripts/config/template.')
     print('LIMITS: external URLs, prose truth and runtime behavior require separate review; '
           'pattern matching cannot prove absence of every secret.')
 
