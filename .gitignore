@@ -1,16 +1,34 @@
-# Environment variables
+# Local secrets; only the empty template is versioned.
 .env
-.env*.local
+.env.*
+!.env.example
+*.pem
+*.key
 
-# System & IDE files
+# Local runtime state and SQLite sidecars.
+/var/
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# System and editor state.
 .DS_Store
 .idea/
 .vscode/
 
-# Dependencies & Build artifacts (Python / Node / etc)
+# Dependency, build and test output.
 node_modules/
+.next/
+out/
 dist/
 build/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
 __pycache__/
 *.pyc
 venv/
