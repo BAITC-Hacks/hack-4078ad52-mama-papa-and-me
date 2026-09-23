@@ -1,5 +1,10 @@
 # Серверная конфигурация
 
+## Netlify + Neon
+
+Облако определяется DEPLOY_TARGET=netlify или окружением Netlify (SITE_ID/NETLIFY). В этом режиме DATABASE_URL, APP_ORIGIN и WORKER_SECRET обязательны; тихого отката на SQLite нет. APP_ORIGIN — точный HTTPS origin без завершающего слеша. WORKER_SECRET — не менее 32 символов. AI_MAX_ANALYSIS_MINUTES: локально 3, облако 12, допустимо 1–12. AI_DAILY_ANALYSIS_LIMIT: по умолчанию 50, 0 запрещает новые анализы в Neon; это лимит задач, не долларов.
+
+
 Актуальный прогресс — в [plans.md](../../plans.md), зависимости — в [карте архитектуры](../../docs/architecture/README.md).
 
 ## Ответственность

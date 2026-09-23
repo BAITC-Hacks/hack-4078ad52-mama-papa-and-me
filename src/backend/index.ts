@@ -10,7 +10,7 @@ import {
 import { dataset } from "@/data";
 import { canonicalSelections, simulate } from "@/engine";
 import { getConfig } from "@/config";
-import { createStorage, type AnalysisJob, type Storage } from "@/storage";
+import { createStorage, createPostgresStorage, type AnalysisJob, type Storage } from "@/storage";
 import {
   createAI,
   extractSources,
@@ -29,9 +29,14 @@ export class HttpError extends Error {
   }
 }
 const databases = new Map<string, Storage>();
+export function closeStorageConnections() {
+  for (const db of databases.values()) db.close();
+  databases.clear();
+}
 function storage() {
-  const path = getConfig().databasePath;
-  if (!databases.has(path)) databases.set(path, createStorage(path));
+  const config = getConfig();
+  const path = config.databaseUrl || config.databasePath;
+  if (!databases.has(path)) databases.set(path, config.databaseUrl ? createPostgresStorage(config.databaseUrl, config.dailyAnalysisLimit) : createStorage(path));
   return databases.get(path)!;
 }
 export function runSimulation(value: unknown) {
@@ -48,12 +53,12 @@ export function runSimulation(value: unknown) {
 export function listScenarios() {
   return storage().listScenarios();
 }
-export function getScenario(id: string) {
-  const value = storage().getScenario(id);
+export async function getScenario(id: string) {
+  const value = await storage().getScenario(id);
   if (!value) throw new HttpError(404, "Сценарий не найден.");
   return value;
 }
-export function saveScenario(value: unknown) {
+export async function saveScenario(value: unknown) {
   const parsed = saveScenarioSchema.parse(value);
   const input: ScenarioInput = {
     datasetVersion: parsed.datasetVersion,
@@ -65,7 +70,7 @@ export function saveScenario(value: unknown) {
     throw new HttpError(400, result.errors.map((e) => e.message).join(" "));
   let analysis: AnalysisView | undefined;
   if (parsed.analysisId) {
-    const job = storage().getJob(parsed.analysisId);
+    const job = await storage().getJob(parsed.analysisId);
     if (!job || job.kind !== "final" || !job.explanation ||
         !["completed", "failed"].includes(job.status) ||
         job.snapshotKey !== canonicalSelections(input.selections) ||
@@ -91,7 +96,7 @@ export function saveScenario(value: unknown) {
     report: result.report,
     ...(analysis ? { analysis } : {}),
   };
-  storage().saveScenario(saved);
+  await storage().saveScenario(saved);
   return saved;
 }
 function view(job: AnalysisJob): AnalysisView {
@@ -149,16 +154,16 @@ function context(job: AnalysisJob) {
     city: "Астана, Казахстан; районы и значения синтетические. Климатические и экономические данные для обоснования требуется проверить по источникам.",
   };
 }
-function failed(job: AnalysisJob, message: string) {
-  const current = storage().getJob(job.id);
+async function failed(job: AnalysisJob, message: string) {
+  const current = await storage().getJob(job.id);
   if (current && current.status !== "pending") return view(current);
   job.status = "failed";
   job.phase = "done";
   job.mode = "fallback";
   job.error = message;
   job.explanation = fallback(job.report, message);
-  storage().saveJob(job);
-  return view(job);
+  await storage().saveJob(job);
+  return view((await storage().getJob(job.id))!);
 }
 function safeAIError(error: unknown) {
   const status = (error as { status?: number })?.status;
@@ -184,8 +189,7 @@ export async function startAnalysis(value: unknown) {
     !dataset.measures.some((m) => m.id === request.measureId)
   )
     throw new HttpError(400, "Неизвестная мера.");
-  const duplicate = db.getRequest(request.requestId);
-  if (duplicate) {
+  const duplicateView = (duplicate: AnalysisJob) => {
     const key = (r: typeof request) => JSON.stringify({ ...r,
       selections: canonicalSelections(r.selections),
       previousSelections: r.previousSelections ? canonicalSelections(r.previousSelections) : null,
@@ -193,7 +197,9 @@ export async function startAnalysis(value: unknown) {
     if (key(duplicate.request) !== key(request))
       throw new HttpError(409, "Идентификатор запроса уже использован для другого анализа.");
     return view(duplicate);
-  }
+  };
+  const duplicate = await db.getRequest(request.requestId);
+  if (duplicate) return duplicateView(duplicate);
   const input = {
     datasetVersion: request.datasetVersion,
     rulesVersion: request.rulesVersion,
@@ -223,7 +229,7 @@ export async function startAnalysis(value: unknown) {
     );
   }
   if (
-    db.countRecent(
+    await db.countRecent(
       request.sessionId,
       new Date(Date.now() - 60_000).toISOString(),
     ) >= 6
@@ -232,7 +238,7 @@ export async function startAnalysis(value: unknown) {
       429,
       "Не больше шести анализов в минуту. Подождите немного.",
     );
-  const previousJobs = db.activeJobs(request.sessionId);
+  const previousJobs = await db.activeJobs(request.sessionId);
   const job: AnalysisJob = {
     id: randomUUID(),
     request,
@@ -254,11 +260,19 @@ export async function startAnalysis(value: unknown) {
     promptVersion: PROMPT_VERSION,
   };
   // A durable row prevents a repeated browser submission from generating twice.
-  db.insertJob(job);
-  // Reserve the request synchronously before any awaited provider cancellation.
-  // Concurrent requests see this job and can cancel/deduplicate it safely.
+  try {
+    if (!(await db.insertJob(job))) {
+      const existing = await db.getRequest(request.requestId);
+      if (existing) return duplicateView(existing);
+      throw new Error("Missing duplicate job");
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === "DAILY_ANALYSIS_LIMIT")
+      throw new HttpError(429, "Дневной лимит AI-анализов исчерпан. Расчёт города доступен.");
+    throw error;
+  }
   for (const active of previousJobs) await cancelAnalysis(active.id);
-  if (db.getJob(job.id)?.status !== "pending") return view(db.getJob(job.id)!);
+  if ((await db.getJob(job.id))?.status !== "pending") return view((await db.getJob(job.id))!);
   const config = getConfig();
   if (!config.aiEnabled || !config.apiKey)
     return failed(
@@ -270,31 +284,37 @@ export async function startAnalysis(value: unknown) {
       request,
       result.report,
       context(job),
-      db.history(request.sessionId),
+      await db.history(request.sessionId),
     );
-    if (db.getJob(job.id)?.status !== "pending") {
+    if ((await db.getJob(job.id))?.status !== "pending") {
       await createAI(config)
         .cancel(response.id)
         .catch(() => {});
-      return view(db.getJob(job.id)!);
+      return view((await db.getJob(job.id))!);
     }
     job.providerId = response.id;
-    db.saveJob(job);
+    await db.saveJob(job);
     return view(job);
   } catch (error) {
-    if (db.getJob(job.id)?.status !== "pending")
-      return view(db.getJob(job.id)!);
+    if ((await db.getJob(job.id))?.status !== "pending")
+      return view((await db.getJob(job.id))!);
     return failed(job, safeAIError(error));
   }
 }
+export async function readAnalysis(id: string) {
+  const job = await storage().getJob(id);
+  if (!job) throw new HttpError(404, "Анализ не найден.");
+  return view(job);
+}
 export async function pollAnalysis(id: string) {
   const db = storage();
-  let job = db.getJob(id);
+  let job = (await db.getJob(id));
   if (!job) throw new HttpError(404, "Анализ не найден.");
   if (job.status !== "pending") return view(job);
-  if (!db.lock(id)) return view(job);
+  const lease = await db.lock(id);
+  if (!lease) return view(job);
   try {
-    job = db.getJob(id)!;
+    job = (await db.getJob(id))!;
     if (job.status !== "pending") return view(job);
     if (!job.providerId) {
       if (Date.now() - Date.parse(job.createdAt) > 30_000)
@@ -310,7 +330,7 @@ export async function pollAnalysis(id: string) {
       }),
       response = await ai.retrieve(job.providerId);
     // Cancel can arrive while the provider request is being read.
-    if (db.getJob(id)?.status !== "pending") return view(db.getJob(id)!);
+    if ((await db.getJob(id))?.status !== "pending") return view((await db.getJob(id))!);
     const expired =
       Date.now() - Date.parse(job.createdAt) > getConfig().maxAnalysisMs;
     // A suspended browser may poll late: deliver an already completed final answer.
@@ -347,7 +367,7 @@ export async function pollAnalysis(id: string) {
       // creation leaves an interrupted job rather than silently submitting twice.
       job.phase = "explanation";
       job.providerId = null;
-      db.saveJob(job);
+      await db.saveJob(job);
       const next = await ai.explain(
         job.request,
         job.report,
@@ -355,13 +375,13 @@ export async function pollAnalysis(id: string) {
         job.researchText,
         job.sources,
       );
-      if (db.getJob(id)?.status !== "pending") {
+      if ((await db.getJob(id))?.status !== "pending") {
         await ai.cancel(next.id).catch(() => {});
-        return view(db.getJob(id)!);
+        return view((await db.getJob(id))!);
       }
       job.providerId = next.id;
       job.phase = "explanation";
-      db.saveJob(job);
+      await db.saveJob(job);
     } else {
       job.explanation = verifyExplanation(
         JSON.parse(response.output_text),
@@ -370,24 +390,24 @@ export async function pollAnalysis(id: string) {
       );
       job.status = "completed";
       job.phase = "done";
-      db.saveJob(job);
+      await db.saveJob(job);
     }
     return view(job);
   } catch (error) {
-    if (db.getJob(id)?.status === "cancelled") return view(db.getJob(id)!);
+    if ((await db.getJob(id))?.status === "cancelled") return view((await db.getJob(id))!);
     return failed(job, safeAIError(error));
   } finally {
-    db.unlock(id);
+    await db.unlock(id, lease);
   }
 }
 export async function cancelAnalysis(id: string) {
   const db = storage(),
-    job = db.getJob(id);
+    job = (await db.getJob(id));
   if (!job) throw new HttpError(404, "Анализ не найден.");
   if (job.status === "pending") {
     job.status = "cancelled";
     job.phase = "done";
-    db.saveJob(job);
+    await db.saveJob(job);
     if (job.providerId && getConfig().apiKey)
       await createAI(getConfig())
         .cancel(job.providerId)

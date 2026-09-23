@@ -1,5 +1,10 @@
 # Серверные сценарии
 
+## Netlify + Neon
+
+Облачный режим: readAnalysis читает состояние без продвижения, pollAnalysis вызывается защищённым worker API. Дополнительные публичные точки входа: dispatch.ts (запуск Netlify worker) и worker-auth.ts (проверка служебного токена без server-only, доступна standalone worker). getScenario/saveScenario стали async; closeStorageConnections закрывает локальные соединения для тестов. Backend выбирает Neon при DATABASE_URL, иначе SQLite.
+
+
 Актуальный прогресс — в [plans.md](../../plans.md), зависимости — в [карте архитектуры](../../docs/architecture/README.md).
 
 ## Ответственность

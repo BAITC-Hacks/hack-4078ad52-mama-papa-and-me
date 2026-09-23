@@ -1,5 +1,10 @@
 # Страницы и HTTP-адаптеры
 
+## Netlify + Neon
+
+В облаке GET /api/analyses/:id только читает статус. POST /api/internal/analyses/:id продвигает этап, требует WORKER_SECRET и недоступен обычному браузеру. POST /api/analyses дожидается подтверждения запуска Netlify Background Function. Ошибка запуска отменяет анализ и возвращает 503. Запись проверяет APP_ORIGIN, локальный режим сохраняет localhost-защиту.
+
+
 Актуальный прогресс — в [plans.md](../../plans.md), зависимости — в [карте архитектуры](../../docs/architecture/README.md).
 
 ## Ответственность

@@ -7,7 +7,7 @@ it("preserves every numeric input from the six original DOCX tables", () => {
     new URL("../../docs/data/dataset-source.md", import.meta.url),
     "utf8",
   );
-  const tables = source
+  const tables = source.replace(/\r\n/g, "\n")
     .split(/\n\s*\n/)
     .filter((block) => block.startsWith("|"))
     .map((block) =>

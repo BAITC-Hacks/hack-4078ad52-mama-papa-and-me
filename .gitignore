@@ -36,3 +36,6 @@ venv/
 
 # Isolated browser-test build output
 /.next-e2e/
+
+# Netlify CLI linkage, generated functions, caches and local environment.
+.netlify/

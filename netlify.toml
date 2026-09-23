@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_VERSION = "11.20.0"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Secrets and APP_ORIGIN must be configured in the Netlify dashboard,
+# scoped to Functions as well as Builds. Never put them in this file.

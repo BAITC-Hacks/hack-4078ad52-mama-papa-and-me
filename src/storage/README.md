@@ -1,5 +1,10 @@
 # Локальное хранение
 
+## Netlify + Neon
+
+Облачный адаптер: createPostgresStorage(url, dailyLimit), PostgreSQL через Neon HTTP driver. Backend ожидает результаты всех методов через await. Миграция migrations/001-postgres.sql выполняется явно. Лимит приёма задач общий за сутки UTC, lease защищён токеном, терминальные состояния не перезаписываются. Проверки SQL выполняются на PGlite; подключение к реальному Neon проверяется при публикации.
+
+
 Актуальный прогресс — в [plans.md](../../plans.md), зависимости — в [карте архитектуры](../../docs/architecture/README.md).
 
 ## Ответственность

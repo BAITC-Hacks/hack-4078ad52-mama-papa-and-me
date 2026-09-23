@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { getConfig } from "@/config";
 import { HttpError } from "@/backend";
 export async function body(request: Request) {
   const origin = request.headers.get("origin");
   const host = request.headers.get("host") || new URL(request.url).host;
-  if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host))
-    throw new HttpError(403, "Ожидается локальный адрес.");
-  const expected = `http://${host}`;
-  if (origin && origin !== expected)
-    throw new HttpError(
-      403,
-      "Запрос разрешён только из локального приложения.",
-    );
+  const configured = getConfig().appOrigin;
+  const local = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host);
+  const expected = configured || (local ? `http://${host}` : "");
+  if (!expected || new URL(expected).host !== host || (origin && origin !== expected))
+    throw new HttpError(403, "Запрос разрешён только из приложения.");
   if (request.headers.get("sec-fetch-site") === "cross-site")
     throw new HttpError(403, "Межсайтовый запрос отклонён.");
   if (!request.headers.get("content-type")?.includes("application/json"))

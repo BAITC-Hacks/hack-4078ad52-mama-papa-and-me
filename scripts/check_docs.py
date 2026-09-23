@@ -62,13 +62,15 @@ def main():
     env = dict(line.split('=', 1) for line in (ROOT / '.env.example').read_text().splitlines()
                if line and not line.startswith('#'))
     require(env == {'OPENAI_API_KEY': '', 'OPENAI_MODEL': 'gpt-6-astra',
-                    'SQLITE_PATH': './var/akim.sqlite'}, 'Unexpected environment template')
-    ignored = ['.env', '.env.local', '.env.production', 'var/akim.sqlite',
+                    'SQLITE_PATH': './var/akim.sqlite', 'DEPLOY_TARGET': 'local',
+                    'DATABASE_URL': '', 'APP_ORIGIN': '', 'WORKER_SECRET': '',
+                    'AI_DAILY_ANALYSIS_LIMIT': '50'}, 'Unexpected environment template')
+    ignored = ['.netlify/state.json', '.netlify/functions-internal/example.js', '.env', '.env.local', '.env.production', 'var/akim.sqlite',
                'example.sqlite', 'example.sqlite-wal', 'example.sqlite-shm',
                'example.sqlite3', 'example.sqlite3-journal', 'example.db', 'example.db-wal']
     result = subprocess.run(['git', 'check-ignore', '--no-index', '--stdin'], cwd=ROOT,
-                            input='\n'.join(ignored) + '\n', text=True, capture_output=True)
-    require(result.returncode == 0 and set(result.stdout.splitlines()) == set(ignored),
+                            input=('\n'.join(ignored) + '\n').encode(), capture_output=True)
+    require(result.returncode == 0 and set(result.stdout.decode().splitlines()) == set(ignored),
             'Secrets or SQLite artifacts are not ignored')
     result = subprocess.run(['git', 'check-ignore', '--no-index', '-q', '.env.example'], cwd=ROOT)
     require(result.returncode == 1, '.env.example must remain versionable')

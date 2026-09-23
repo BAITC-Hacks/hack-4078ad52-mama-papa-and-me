@@ -1,3 +1,4 @@
+import { closeStorageConnections } from "@/backend";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,6 +18,7 @@ import {
 import { fallback, verifyExplanation } from "@/ai";
 const directories: string[] = [];
 afterEach(() => {
+  closeStorageConnections();
   vi.unstubAllEnvs();
   for (const directory of directories.splice(0))
     rmSync(directory, { recursive: true, force: true });
@@ -54,13 +56,13 @@ describe("server boundaries and persistence", () => {
     expect(reopened.getScenario(saved.id)).toEqual(saved);
     reopened.close();
   });
-  it("saves and opens a server-calculated scenario", () => {
+  it("saves and opens a server-calculated scenario", async () => {
     vi.stubEnv("SQLITE_PATH", temp());
-    const saved = saveScenario({
+    const saved = await saveScenario({
       ...scenarioInput(exampleSelections),
       name: "Нура",
     });
-    expect(getScenario(saved.id).report.score).toBeCloseTo(56.54307, 8);
+    expect((await getScenario(saved.id)).report.score).toBeCloseTo(56.54307, 8);
   });
   it("supports fallback without credentials and deduplicates browser submissions", async () => {
     vi.stubEnv("SQLITE_PATH", temp());

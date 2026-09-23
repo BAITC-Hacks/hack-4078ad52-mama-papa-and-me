@@ -1,3 +1,5 @@
+import { closeStorageConnections } from "@/backend";
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,6 +31,7 @@ beforeEach(() => {
   provider.cancel.mockResolvedValue({});
 });
 afterEach(() => {
+  closeStorageConnections();
   vi.unstubAllEnvs();
   rmSync(directory, { recursive: true, force: true });
 });
@@ -80,8 +83,12 @@ function updateJob(
   const db = createStorage(filename),
     job = db.getJob(id)!;
   change(job);
-  db.saveJob(job);
   db.close();
+  // Deliberately alter persisted fixtures, including terminal records, to test
+  // validation of legacy/corrupt archives; production saveJob forbids this.
+  const raw = new Database(filename);
+  raw.prepare("UPDATE analyses SET payload=? WHERE id=?").run(JSON.stringify(job), id);
+  raw.close();
 }
 describe("durable AI lifecycle with a fake provider (no network)", () => {
   it("deduplicates submissions, progresses through two phases and records usage", async () => {
@@ -184,6 +191,7 @@ it("deduplicates while a previous provider cancellation is still waiting", async
   const request = { ...input(), sessionId: first.sessionId };
   const a = startAnalysis(request);
   const b = startAnalysis(request);
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
   release();
   const [one, two] = await Promise.all([a, b]);
   expect(one.id).toBe(two.id);
@@ -196,6 +204,7 @@ it("does not launch a superseded job after awaited cancellation", async () => {
   let release!: () => void;
   provider.cancel.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
   const older = startAnalysis({ ...input(), sessionId: first.sessionId });
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
   const newer = await startAnalysis({ ...input(), sessionId: first.sessionId });
   release();
   expect((await older).status).toBe("cancelled");
@@ -217,17 +226,17 @@ it("saves the final explanation, sources and server facts with the matching scen
   await pollAnalysis(job.id);
   const completed = await pollAnalysis(job.id);
   expect(completed.evidence?.find((f) => f.id === "score.after")?.value).toBeCloseTo(56.54307, 8);
-  const saved = saveScenario({ ...scenarioInput(exampleSelections), name: "С объяснением", analysisId: job.id });
-  expect(getScenario(saved.id).analysis).toEqual(completed);
+  const saved = await saveScenario({ ...scenarioInput(exampleSelections), name: "С объяснением", analysisId: job.id });
+  expect((await getScenario(saved.id)).analysis).toEqual(completed);
   expect(saved.analysis).not.toHaveProperty("providerId");
   const other = exampleSelections.map((s) => s.measureId === "M10" ? { ...s, districtId: "esil" } : s);
-  expect(() => saveScenario({ ...scenarioInput(other), name: "Другой", analysisId: job.id })).toThrow("не относится");
+  await expect(saveScenario({ ...scenarioInput(other), name: "Другой", analysisId: job.id })).rejects.toThrow("не относится");
 });
 
 it("rejects pending analyses when saving but still permits saving without AI", async () => {
   const job = await startAnalysis(input());
-  expect(() => saveScenario({ ...scenarioInput(exampleSelections), name: "Ожидание", analysisId: job.id })).toThrow();
-  expect(saveScenario({ ...scenarioInput(exampleSelections), name: "Без AI" }).analysis).toBeUndefined();
+  await expect(saveScenario({ ...scenarioInput(exampleSelections), name: "Ожидание", analysisId: job.id })).rejects.toThrow();
+  expect((await saveScenario({ ...scenarioInput(exampleSelections), name: "Без AI" })).analysis).toBeUndefined();
 });
 
 it("keeps cancellation arriving during timeout cleanup", async () => {
@@ -257,6 +266,7 @@ it("does not revive a failed startup when the provider returns late", async () =
   provider.research.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
   const request = input();
   const pending = startAnalysis(request);
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
   const db = createStorage(filename);
   const job = db.getRequest(request.requestId)!;
   db.close();
@@ -274,9 +284,9 @@ it("resaves an older prompt only if its explanation passes current checks", asyn
   await pollAnalysis(job.id);
   await pollAnalysis(job.id);
   updateJob(job.id, (j) => { j.promptVersion = "urban-advisor-2"; });
-  const saved = saveScenario({ ...scenarioInput(exampleSelections), name: "Проверенный архив", analysisId: job.id });
+  const saved = await saveScenario({ ...scenarioInput(exampleSelections), name: "Проверенный архив", analysisId: job.id });
   expect(saved.analysis?.promptVersion).toBe("urban-advisor-2");
   expect(saved.analysis?.explanation?.summary.text).toContain("Нуры");
   updateJob(job.id, (j) => { j.explanation!.summary.text = "Итоговый Score равен 99,99."; });
-  expect(() => saveScenario({ ...scenarioInput(exampleSelections), name: "Ошибочный архив", analysisId: job.id })).toThrow("текущую проверку");
+  await expect(saveScenario({ ...scenarioInput(exampleSelections), name: "Ошибочный архив", analysisId: job.id })).rejects.toThrow("текущую проверку");
 });

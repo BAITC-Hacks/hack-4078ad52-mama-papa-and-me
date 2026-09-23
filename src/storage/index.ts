@@ -51,18 +51,18 @@ export function createStorage(filename: string) {
         .all()
         .map((r) => unpack<SavedScenario>(r)!),
     insertJob: (job: AnalysisJob) => {
-      db.prepare(
-        "INSERT INTO analyses(id,request_id,session_id,created_at,payload) VALUES(?,?,?,?,?)",
+      return db.prepare(
+        "INSERT OR IGNORE INTO analyses(id,request_id,session_id,created_at,payload) VALUES(?,?,?,?,?)",
       ).run(
         job.id,
         job.request.requestId,
         job.request.sessionId,
         job.createdAt,
         JSON.stringify(job),
-      );
+      ).changes === 1;
     },
     saveJob: (job: AnalysisJob) => {
-      db.prepare("UPDATE analyses SET payload=? WHERE id=?").run(
+      db.prepare("UPDATE analyses SET payload=? WHERE id=? AND json_extract(payload, '$.status')='pending'").run(
         JSON.stringify(job),
         job.id,
       );
@@ -112,9 +112,11 @@ export function createStorage(filename: string) {
           "UPDATE analyses SET locked_until=? WHERE id=? AND locked_until<?",
         )
         .run(Date.now() + 90_000, id, Date.now()).changes === 1,
-    unlock: (id: string) => {
+    unlock: (id: string, _lease?: string | boolean) => {
+      void _lease;
       db.prepare("UPDATE analyses SET locked_until=0 WHERE id=?").run(id);
     },
   };
 }
-export type Storage = ReturnType<typeof createStorage>;
+export { createPostgresStorage } from "./postgres";
+export type Storage = ReturnType<typeof createStorage> | ReturnType<typeof import("./postgres").createPostgresStorage>;

@@ -1,5 +1,10 @@
 # Архитектура локального приложения
 
+## Netlify + Neon
+
+Облачный режим Netlify + Neon: UI → Next.js API → backend → Neon; POST анализа также запускает netlify/functions/analysis-background.ts. Worker → защищённый POST /api/internal/analyses/:id → pollAnalysis. Браузер читает статус независимо от worker. Дополнительные публичные входы backend/dispatch.ts и backend/worker-auth.ts нужны для HTTP-адаптера и standalone worker. На Netlify локальная SQLite не используется. Подробности и ограничения: [публикация](../deployment.md).
+
+
 Реализован модульный монолит: один Next.js-процесс на 127.0.0.1, браузерный UI, локальная SQLite и внешний OpenAI API. Текущее состояние — в [plans.md](../../plans.md).
 
 ```mermaid
