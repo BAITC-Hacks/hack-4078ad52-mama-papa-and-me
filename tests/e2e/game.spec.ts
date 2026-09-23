@@ -76,7 +76,7 @@ test("mobile layout and keyboard interaction", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Район Есиль", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "AI-советник", exact: true }).click();
+  await page.getByRole("button", { name: "Открыть AI-советника", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(
     await page.evaluate(
@@ -133,14 +133,14 @@ test("report explains decisions and selection edits do not spend AI requests", a
   await expect(page.getByRole("status")).toContainText("Сценарий сохранён");
   await page.getByRole("button", { name: "Мои сценарии" }).click();
   await page.getByRole("button", { name: /Архив с объяснением/ }).first().click();
-  await page.getByRole("button", { name: "AI-советник", exact: true }).click();
+  await page.getByRole("button", { name: "Открыть AI-советника", exact: true }).click();
   await expect(page.getByText("Шаблонное объяснение", { exact: true })).toBeVisible();
   expect(analyses).toHaveLength(1);
   await page.getByRole("button", { name: "Закрыть советника", exact: true }).click();
   await page.getByRole("button", { name: "Изменить решения", exact: true }).click();
   await page.getByLabel("Район для Школа + детский сад", { exact: true }).selectOption("esil");
   await expect(page.getByText(/Исходная ситуация:/)).toBeVisible();
-  await page.getByRole("button", { name: "AI-советник", exact: true }).click();
+  await page.getByRole("button", { name: "Открыть AI-советника", exact: true }).click();
   await expect(page.getByText("Шаблонное объяснение", { exact: true })).not.toBeVisible();
   expect(analyses).toHaveLength(1);
   await page.getByRole("button", { name: "Закрыть советника", exact: true }).click();
@@ -188,4 +188,33 @@ test("AI answer puts decisions before optional research and preserves readable e
   await expect(dialog.getByRole("link", { name: "example.org", exact: true })).toHaveAttribute("href", "https://example.org/study");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("preview keeps its archive and AI state separate without server requests", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", r => { if (new URL(r.url()).pathname.startsWith("/api/")) requests.push(r.url()); });
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/preview");
+  await expect(page.getByText(/Демо интерфейса · расчёт по модели проекта/)).toBeVisible();
+  await page.getByRole("button", { name: "Загрузить пример", exact: true }).click();
+  await page.getByRole("button", { name: "Рассчитать результат", exact: true }).click();
+  await expect(page.getByTestId("final-score")).toHaveText("56,54");
+  await page.getByRole("button", { name: "Разобрать сценарий с AI", exact: true }).click();
+  await expect(page.getByText("Демо-справка", { exact: true })).toBeVisible();
+  await expect(page.getByText("AI-анализ с источниками", { exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "Закрыть советника", exact: true }).click();
+  await page.getByLabel("Название сценария").fill("Изолированное демо");
+  await page.getByRole("button", { name: "Сохранить в браузере", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Сценарий сохранён в этом браузере");
+  await page.getByRole("button", { name: "Мои сценарии", exact: true }).click();
+  await page.getByRole("button", { name: /Изолированное демо/ }).click();
+  await expect(page.getByTestId("final-score")).toHaveText("56,54");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(requests).toEqual([]);
+  expect(await page.evaluate(() => sessionStorage.getItem("akim-active-selection"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("akim-draft-v1"))).toBeNull();
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Рассчитать результат", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Открыть AI-советника", exact: true }).click();
+  await expect(page.getByText("Демо-справка", { exact: true })).not.toBeVisible();
 });

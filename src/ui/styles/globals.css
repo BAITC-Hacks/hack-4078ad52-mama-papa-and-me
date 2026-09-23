@@ -1630,7 +1630,7 @@ td {
     padding: 19px 17px 4px;
   }
   .section-heading h2 {
-    font-size: 16px !important;
+    font-size: 16px;
   }
   .kicker {
     font-size: 8px;
